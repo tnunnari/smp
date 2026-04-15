@@ -52,7 +52,7 @@
         loginUser: null,
         currentUser: null,
         isBoardView: false, 
-        showDayDetails: null, // Memorizza la data per il pop-up di dettaglio
+        showDayDetails: null,
         currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
         selectedDate: today,
         bookings: [],
@@ -83,7 +83,6 @@
         }
     }
 
-    // Calcolo dinamico del limite del 30% per ogni piano
     function calculateDynamicFloors() {
         FLOORS = {};
         USERS.forEach(user => {
@@ -100,7 +99,6 @@
         });
     }
 
-    // Invio dati al database
     async function syncBookingWithGoogle(bookingData, actionType) {
         try {
             await fetch(SCRIPT_URL, {
@@ -142,14 +140,11 @@
         const container = document.getElementById('notification-container');
         const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
         const icon = type === 'error' ? 'x-circle' : 'check-circle-2';
-        
         const toast = document.createElement('div');
         toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 mb-2`;
         toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><p class="font-medium">${message}</p>`;
-        
         container.appendChild(toast);
         lucide.createIcons({ root: toast });
-        
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transition = 'opacity 0.3s ease';
@@ -157,8 +152,8 @@
         }, 4000);
     }
 
-    // Gradiente colori basato sulla percentuale di saturazione
     function getCapacityColorLevels(percentage) {
+        // CORREZIONE: Gestione precisa del 100%
         if (percentage === 0) return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
         if (percentage < 50) return { bar: 'bg-yellow-400', badgeBg: 'bg-yellow-50', badgeText: 'text-yellow-800', badgeBorder: 'border-yellow-300' };
         if (percentage < 100) return { bar: 'bg-orange-500', badgeBg: 'bg-orange-100', badgeText: 'text-orange-800', badgeBorder: 'border-orange-300' };
@@ -188,7 +183,7 @@
 
     async function toggleBooking() {
         const selectedDateStr = getLocalDateString(state.selectedDate);
-        if ([0, 6].includes(state.selectedDate.getDay())) { showNotification("Weekend non prenotabile.", "error"); return; }
+        // CORREZIONE: I weekend non sono più bloccati a meno che non siano nel foglio "Chiusure"
         if (CLOSED_DAYS.includes(selectedDateStr)) { showNotification("Studio chiuso.", "error"); return; }
 
         const existingIndex = state.bookings.findIndex(b => b.userId == state.currentUser.id && b.date === selectedDateStr);
@@ -269,12 +264,12 @@
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = getLocalDateString(new Date(year, month, day)), dayB = state.bookings.filter(b => b.date === dateStr);
             const perc = totalCap > 0 ? Math.round((dayB.length / totalCap) * 100) : 0, colors = getCapacityColorLevels(perc);
-            const isC = CLOSED_DAYS.includes(dateStr), isWK = [0,6].includes(new Date(year, month, day).getDay());
+            const isC = CLOSED_DAYS.includes(dateStr);
             let cellCl = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
             let innerHtml = "";
             if (isC) { cellCl += " bg-orange-50 border-orange-200"; innerHtml = `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded py-1 text-center uppercase">Chiuso</div>`; }
-            else if (isWK) { cellCl += " bg-slate-50 border-slate-100 opacity-60 pointer-events-none"; }
             else {
+                // CORREZIONE: I colori ora seguono la saturazione reale e non vengono sovrascritti dal grigio dei weekend
                 cellCl += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md hover:-translate-y-1`;
                 innerHtml = `<div class="mt-1 space-y-0.5 overflow-hidden flex-1">${dayB.map(b => `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 rounded truncate shadow-sm mb-0.5">${USERS.find(u=>u.id==b.userId)?.name || "..." }</div>`).join('')}</div><div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase">${perc}% SAT</div>`;
             }
@@ -287,13 +282,13 @@
         const dateStr = getLocalDateString(state.selectedDate), monStr = dateStr.substring(0, 7);
         const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
         const hasBooked = state.bookings.some(b => b.userId == state.currentUser.id && b.date === dateStr);
-        const isC = CLOSED_DAYS.includes(dateStr), isWK = [0,6].includes(state.selectedDate.getDay());
+        const isC = CLOSED_DAYS.includes(dateStr);
         let floorStats = Object.keys(FLOORS).map(f => {
             const booked = state.bookings.filter(b => b.date === dateStr && b.floor === f).length, max = FLOORS[f].maxSw;
             const p = Math.min(Math.round((booked / max) * 100), 100), colors = getCapacityColorLevels(p);
             return `<div class="p-3 bg-slate-50 rounded-xl border mb-2"><div class="flex justify-between mb-1"><span class="text-xs font-semibold text-slate-700">${f}</span><span class="text-xs font-bold text-slate-800">${p}%</span></div><div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden"><div class="h-full ${colors.bar}" style="width: ${p}%"></div></div></div>`;
         }).join('');
-        let btn = isC ? `<div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-bold border">Studio Chiuso</div>` : isWK ? `<div class="text-center p-4 bg-slate-50 rounded-xl text-slate-500 font-bold border">Weekend</div>` : `<button onclick="toggleBooking()" class="w-full py-4 px-4 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${hasBooked ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}">${hasBooked ? 'Annulla Smart Working' : 'Prenota Smart Working'}</button>`;
+        let btn = isC ? `<div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-bold border">Studio Chiuso</div>` : `<button onclick="toggleBooking()" class="w-full py-4 px-4 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${hasBooked ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}">${hasBooked ? 'Annulla Smart Working' : 'Prenota Smart Working'}</button>`;
         return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="building-2" class="w-6 h-6 text-indigo-400"></i><h1 class="font-bold text-lg">Studio Smart Booking</h1></div><div class="flex items-center gap-4"><div class="flex items-center gap-2 text-sm"><div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold">${state.currentUser.name.charAt(0)}</div><span>${state.currentUser.name}</span></div><button onclick="logout()" class="p-2 hover:bg-slate-800 rounded-lg"><i data-lucide="log-out" class="w-5 h-5"></i></button></div></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full grid grid-cols-1 lg:grid-cols-4 gap-8"><div class="lg:col-span-1 space-y-6"><div class="bg-white rounded-2xl shadow-md border overflow-hidden"><div class="bg-indigo-50 p-4 border-b"><p class="text-xs font-bold text-indigo-400 uppercase mb-1">Giorno Selezionato</p><h2 class="text-lg font-bold capitalize">${formatDisplayDate(dateStr)}</h2></div><div class="p-5">${btn}</div></div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="building-2" class="w-4 h-4 text-indigo-600"></i>Occupazione Piani</h2>${floorStats}</div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-indigo-600"></i>I Tuoi Limiti (Mese)</h2><div class="p-3 bg-slate-50 rounded-xl border mb-2"><div class="flex justify-between items-end mb-1"><span class="text-xs">Giorni Totali</span><span class="text-xs font-bold">${userB.length} / ${MAX_DAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-600 h-1.5" style="width: ${(userB.length / MAX_DAYS_PER_MONTH) * 100}%"></div></div></div><div class="p-3 bg-slate-50 rounded-xl border"><div class="flex justify-between items-end mb-1"><span class="text-xs text-slate-500">Venerdì</span><span class="text-xs font-bold text-slate-800">${userB.filter(b=>isFriday(b.date)).length} / ${MAX_FRIDAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-400 h-1.5" style="width: ${(userB.filter(b=>isFriday(b.date)).length / MAX_FRIDAYS_PER_MONTH) * 100}%"></div></div></div></div></div><div class="lg:col-span-3 bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Succ.</button></div></div><div class="p-6 flex-1"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3">${generateCalendarCellsHTML()}</div></div></div></main>`;
     }
 
@@ -307,15 +302,23 @@
             const dObj = new Date(year, month, day), dStr = getLocalDateString(dObj), isSel = selStr === dStr;
             const floorB = state.bookings.filter(b => b.date === dStr && b.floor === state.currentUser.floor);
             const mSw = FLOORS[state.currentUser.floor].maxSw, myB = state.bookings.find(b => b.date === dStr && b.userId == state.currentUser.id);
-            const isWK = [0,6].includes(dObj.getDay()), isC = CLOSED_DAYS.includes(dStr);
+            const isC = CLOSED_DAYS.includes(dStr);
             let p = Math.round((floorB.length / mSw) * 100); if (p > 100) p = 100;
             const colors = getCapacityColorLevels(p);
             let cCl = `day-cell aspect-square p-2 rounded-xl border flex flex-col relative transition-all cursor-pointer ${isSel ? 'ring-4 ring-indigo-300 ring-offset-1 border-indigo-500 z-10' : ''}`, contCl = "text-slate-700", bH = "";
-            if (isC) { cCl += " bg-orange-50 border-orange-200"; contCl = "text-orange-800 font-bold"; bH = `<div class="text-[9px] font-bold bg-orange-100 text-orange-600 rounded px-1 text-center uppercase shadow-sm">Chiuso</div>`; }
-            else if (isWK) { cCl += " bg-slate-50 border-slate-100 opacity-60"; contCl = "text-slate-400"; }
-            else if (myB) { cCl += " bg-indigo-600 border-indigo-700 shadow-md"; contCl = "text-white font-bold"; bH = `<div class="text-[9px] font-bold bg-white text-indigo-700 rounded px-1 text-center shadow-sm">IL TUO SW</div>`; }
-            else if (floorB.length >= mSw) { cCl += " bg-red-50 border-red-200"; contCl = "text-red-900 font-bold"; bH = `<div class="text-[9px] font-bold bg-red-500 text-white rounded px-1 text-center shadow-sm uppercase flex items-center justify-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Pieno</div>`; }
-            else { cCl += " bg-white border-slate-200 hover:border-indigo-400"; bH = `<div class="text-[9px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} rounded py-1 border ${colors.badgeBorder} shadow-sm">SW al ${p}%</div>`; }
+            
+            if (isC) { 
+                cCl += " bg-orange-50 border-orange-200"; contCl = "text-orange-800 font-bold"; bH = `<div class="text-[9px] font-bold bg-orange-100 text-orange-600 rounded px-1 text-center uppercase shadow-sm">Chiuso</div>`; 
+            }
+            else if (myB) { 
+                cCl += " bg-indigo-600 border-indigo-700 shadow-md"; contCl = "text-white font-bold"; bH = `<div class="text-[9px] font-bold bg-white text-indigo-700 rounded px-1 text-center shadow-sm">IL TUO SW</div>`; 
+            }
+            else if (floorB.length >= mSw) { 
+                cCl += " bg-red-50 border-red-200"; contCl = "text-red-900 font-bold"; bH = `<div class="text-[9px] font-bold bg-red-500 text-white rounded px-1 text-center shadow-sm uppercase flex items-center justify-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Pieno</div>`; 
+            }
+            else { 
+                cCl += " bg-white border-slate-200 hover:border-indigo-400"; bH = `<div class="text-[9px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} rounded py-1 border ${colors.badgeBorder} shadow-sm">SW al ${p}%</div>`; 
+            }
             html += `<div class="${cCl}" onclick="selectDate('${dStr}')"><span class="font-bold text-xs ${contCl}">${day}</span><div class="mt-auto pt-1">${bH}</div></div>`;
         }
         return html;
@@ -328,7 +331,6 @@
         }); 
     }
 
-    // Avvio iniziale
     loadDataFromGoogleSheets();
 
 </script>
