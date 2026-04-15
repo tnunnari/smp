@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio Smart Booking</title>
+    <!-- Tailwind CSS per la grafica -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Stili personalizzati per scrollbar e animazioni */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translate(-50%, -20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Container Principale dell'App -->
+    <div id="app" class="w-full min-h-screen flex flex-col"></div>
+
+    <!-- Contenitore per le notifiche -->
+    <div id="notification-container" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none"></div>
+
+<script>
+    // --- VARIABILI GLOBALI DINAMICHE ---
+    // Queste verranno popolate leggendo il Google Sheet
+    let USERS = [];
+    let FLOORS = {};
+    let CLOSED_DAYS = []; // Es. ["2026-04-25", "2026-05-01"]
+
+    const MAX_DAYS_PER_MONTH = 6;
+    const MAX_FRIDAYS_PER_MONTH = 2;
+
+    // --- STATO DELL'APP ---
+    const today = new Date();
+    const state = {
+        currentUser: null,
+        currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
+        selectedDate: today,
+        bookings: [
+            // Esempio di prenotazione passata/futura
+            { id: 101, userId: 1, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "ARCHITETTURA" }
+        ],
+        isLoading: true
+    };
+
+    // --- CONNESSIONE AL GOOGLE SHEET (SIMULATA PER L'ANTEPRIMA) ---
+    async function loadDataFromGoogleSheets() {
+        // IN FUTURO: Qui metteremo i link reali ai tuoi CSV di Google Drive.
+        // Per ora simuliamo il caricamento dei tuoi dati reali in modo dinamico.
+        
+        setTimeout(() => {
+            // Simulazione: Dati letti dal foglio "ARCHITETTURA" e altri
+            USERS = [
+                // Dal tuo foglio reale
+                { id: 1, name: "Barakat Charles", floor: "ARCHITETTURA" },
+                { id: 2, name: "Bazzea Elisa", floor: "ARCHITETTURA" },
+                { id: 3, name: "Belforte Francesco", floor: "ARCHITETTURA" },
+                { id: 4, name: "Enea Giuseppe", floor: "ARCHITETTURA" },
+                { id: 5, name: "Farag Ahmed", floor: "ARCHITETTURA" },
+                { id: 6, name: "Flagiello Roberta", floor: "ARCHITETTURA" },
+                { id: 7, name: "Joshi Aditya", floor: "ARCHITETTURA" },
+                { id: 8, name: "Mancini Giulia", floor: "ARCHITETTURA" },
+                { id: 9, name: "Montoya Gracia Andrea", floor: "ARCHITETTURA" },
+                { id: 10, name: "Soumitra Soumitra", floor: "ARCHITETTURA" },
+                { id: 11, name: "Vacca Vittoria", floor: "ARCHITETTURA" },
+                // Altri fogli di test
+                { id: 12, name: "Mario Rossi", floor: "New Space" },
+                { id: 13, name: "Anna Bianchi", floor: "New Space" },
+                { id: 14, name: "Luca Verdi", floor: "New Space" },
+                { id: 15, name: "Giulia Neri", floor: "Interior" },
+                { id: 16, name: "Paolo Gialli", floor: "Interior" }
+            ];
+
+            // Simulazione: Dati letti dal foglio "Giorni chiusura studio"
+            CLOSED_DAYS = [
+                `${today.getFullYear()}-04-25`, // Esempio 25 Aprile
+                `${today.getFullYear()}-05-01`  // Esempio 1 Maggio
+            ];
+
+            // --- CALCOLO AUTOMATICO DELLE PERCENTUALI ---
+            calculateDynamicFloors();
+            
+            state.isLoading = false;
+            render();
+        }, 800); // Finge un caricamento dal database di 0.8 secondi
+    }
+
+    function calculateDynamicFloors() {
+        FLOORS = {};
+        // Conta quante persone ci sono per ogni piano
+        USERS.forEach(user => {
+            if (!FLOORS[user.floor]) {
+                FLOORS[user.floor] = { total: 0, maxSw: 0 };
+            }
+            FLOORS[user.floor].total += 1;
+        });
+
+        // Calcola matematicamente il 30%
+        Object.keys(FLOORS).forEach(floorName => {
+            let limit = Math.round(FLOORS[floorName].total * 0.30);
+            // Assicuriamoci che ci sia almeno 1 posto in SW se c'è almeno un dipendente
+            if (limit < 1 && FLOORS[floorName].total > 0) limit = 1; 
+            FLOORS[floorName].maxSw = limit;
+        });
+    }
+
+    // --- HELPER FUNZIONI ---
+    function getLocalDateString(dateObj) {
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function isFriday(dateString) {
+        const parts = dateString.split('-');
+        return new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]).getDay() === 5;
+    }
+
+    function formatDisplayDate(dateStr) {
+        const parts = dateStr.split('-');
+        const dateObj = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
+        return dateObj.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function showNotification(message, type = 'error') {
+        const container = document.getElementById('notification-container');
+        const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
+        const icon = type === 'error' ? 'x-circle' : 'check-circle-2';
+        
+        const toast = document.createElement('div');
+        toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 mb-2`;
+        toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><p class="font-medium">${message}</p>`;
+        
+        container.appendChild(toast);
+        lucide.createIcons({ root: toast });
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    // --- AZIONI ---
+    function login(userId) {
+        state.currentUser = USERS.find(u => u.id === userId);
+        render();
+    }
+
+    function logout() {
+        state.currentUser = null;
+        render();
+    }
+
+    function changeMonth(offset) {
+        const newDate = new Date(state.currentMonthDate.getFullYear(), state.currentMonthDate.getMonth() + offset, 1);
+        state.currentMonthDate = newDate;
+        render();
+    }
+
+    function selectDate(dateStr) {
+        const parts = dateStr.split('-');
+        state.selectedDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
+        render();
+    }
+
+    function toggleBooking() {
+        const selectedDateStr = getLocalDateString(state.selectedDate);
+        const dayOfWeek = state.selectedDate.getDay();
+        
+        // 1. Controllo Festività e Chiusure
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            showNotification("Non puoi prenotare lo Smart Working nel weekend.", "error");
+            return;
+        }
+        if (CLOSED_DAYS.includes(selectedDateStr)) {
+            showNotification("Lo studio è chiuso in questa data. Prenotazione bloccata.", "error");
+            return;
+        }
+
+        const existingBookingIndex = state.bookings.findIndex(b => b.userId === state.currentUser.id && b.date === selectedDateStr);
+        
+        if (existingBookingIndex > -1) {
+            state.bookings.splice(existingBookingIndex, 1);
+            showNotification("Prenotazione annullata con successo.", "success");
+            render();
+            return;
+        }
+
+        // Controlli Mensili
+        const currentMonthStr = selectedDateStr.substring(0, 7);
+        const userBookingsThisMonth = state.bookings.filter(b => b.userId === state.currentUser.id && b.date.startsWith(currentMonthStr));
+        
+        if (userBookingsThisMonth.length >= MAX_DAYS_PER_MONTH) {
+            showNotification(`Hai già raggiunto il limite di ${MAX_DAYS_PER_MONTH} giorni mensili.`, "error");
+            return;
+        }
+
+        if (dayOfWeek === 5) {
+            const userFridaysThisMonth = userBookingsThisMonth.filter(b => isFriday(b.date));
+            if (userFridaysThisMonth.length >= MAX_FRIDAYS_PER_MONTH) {
+                showNotification(`Hai già esaurito i ${MAX_FRIDAYS_PER_MONTH} venerdì disponibili.`, "error");
+                return;
+            }
+        }
+
+        // Controllo Copertura Piano (Adesso usa il 30% dinamico!)
+        const floorBookingsOnDate = state.bookings.filter(b => b.floor === state.currentUser.floor && b.date === selectedDateStr);
+        const maxSwForFloor = FLOORS[state.currentUser.floor].maxSw;
+
+        if (floorBookingsOnDate.length >= maxSwForFloor) {
+            showNotification(`Il piano "${state.currentUser.floor}" ha raggiunto il limite per questa data (Max ${maxSwForFloor}).`, "error");
+            return;
+        }
+
+        // Prenota
+        state.bookings.push({
+            id: Date.now(),
+            userId: state.currentUser.id,
+            date: selectedDateStr,
+            floor: state.currentUser.floor
+        });
+        
+        showNotification("Smart Working prenotato con successo!", "success");
+        render();
+    }
+
+    // --- MOTORE DI RENDERING ---
+    function render() {
+        const app = document.getElementById('app');
+        
+        if (state.isLoading) {
+            app.innerHTML = renderLoadingScreen();
+        } else if (!state.currentUser) {
+            app.innerHTML = renderLoginScreen();
+        } else {
+            app.innerHTML = renderDashboardScreen();
+            attachDashboardListeners();
+        }
+        
+        lucide.createIcons();
+    }
+
+    function renderLoadingScreen() {
+        return `
+        <div class="flex-1 flex flex-col items-center justify-center p-4">
+            <i data-lucide="loader-2" class="w-12 h-12 text-indigo-600 animate-spin mb-4"></i>
+            <p class="text-slate-500 font-medium font-bold">Sincronizzazione con Google Drive...</p>
+        </div>`;
+    }
+
+    function renderLoginScreen() {
+        let userButtons = USERS.map(user => `
+            <button onclick="login(${user.id})" class="w-full flex items-center justify-between p-3 border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-300 transition-all group">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+                        ${user.name.charAt(0)}
+                    </div>
+                    <div class="text-left">
+                        <p class="font-bold text-slate-800 group-hover:text-indigo-900">${user.name}</p>
+                        <p class="text-xs text-slate-500 font-medium">${user.floor}</p>
+                    </div>
+                </div>
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-slate-300 group-hover:text-indigo-500"></i>
+            </button>
+        `).join('');
+
+        return `
+        <div class="flex-1 flex flex-col items-center justify-center p-4">
+            <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+                <div class="bg-slate-900 p-8 text-center">
+                    <i data-lucide="building-2" class="w-14 h-14 text-white mx-auto mb-3"></i>
+                    <h1 class="text-2xl font-bold text-white">Studio Smart Booking</h1>
+                    <p class="text-slate-400 text-sm mt-1">Portale gestione presenze</p>
+                </div>
+                <div class="p-8">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 text-center">Seleziona utente</h2>
+                    <div class="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                        ${userButtons}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function renderDashboardScreen() {
+        const selectedDateStr = getLocalDateString(state.selectedDate);
+        const selectedMonthStr = selectedDateStr.substring(0, 7);
+        
+        const userBookingsThisMonth = state.bookings.filter(b => b.userId === state.currentUser.id && b.date.startsWith(selectedMonthStr));
+        const userFridaysThisMonth = userBookingsThisMonth.filter(b => isFriday(b.date));
+        const hasBookedSelectedDate = state.bookings.some(b => b.userId === state.currentUser.id && b.date === selectedDateStr);
+        
+        const dayOfWeek = state.selectedDate.getDay();
+        const isSelectedWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isSelectedClosed = CLOSED_DAYS.includes(selectedDateStr);
+
+        // Costruzione Pannello Sinistro
+        let floorStatsHtml = Object.keys(FLOORS).map(floorName => {
+            const config = FLOORS[floorName];
+            const booked = state.bookings.filter(b => b.date === selectedDateStr && b.floor === floorName).length;
+            const max = config.maxSw;
+            const percentage = Math.min((booked / max) * 100, 100);
+            const isFull = booked >= max;
+            const barColor = isFull ? 'bg-red-500' : 'bg-indigo-500';
+
+            return `
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="flex justify-between items-end mb-2">
+                        <span class="text-sm font-semibold text-slate-700">${floorName}</span>
+                        <span class="text-sm font-bold text-slate-800">${booked} <span class="text-xs text-slate-400">/ ${max} SW</span></span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                        <div class="h-2 rounded-full transition-all duration-500 ${barColor}" style="width: ${percentage}%"></div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        let bookingActionHtml = "";
+        
+        if (isSelectedClosed) {
+            bookingActionHtml = `
+            <div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-medium border border-orange-100 flex flex-col items-center gap-2">
+                <i data-lucide="store" class="w-6 h-6"></i>
+                Studio Chiuso
+            </div>`;
+        } else if (isSelectedWeekend) {
+            bookingActionHtml = `
+            <div class="text-center p-4 bg-slate-50 rounded-xl text-slate-500 font-medium border border-slate-100">
+                Weekend non prenotabile
+            </div>`;
+        } else {
+            bookingActionHtml = `
+            <button onclick="toggleBooking()" class="w-full py-4 px-4 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${hasBookedSelectedDate ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}">
+                ${hasBookedSelectedDate ? 'Annulla Prenotazione' : 'Prenota Smart Working'}
+            </button>`;
+        }
+
+        return `
+        <!-- HEADER -->
+        <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="building-2" class="w-6 h-6 text-indigo-400"></i>
+                    <h1 class="font-bold text-lg tracking-tight hidden sm:block">Studio Smart Booking</h1>
+                    <h1 class="font-bold text-lg tracking-tight sm:hidden">SSB</h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3 text-sm">
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold shadow-inner">
+                            ${state.currentUser.name.charAt(0)}
+                        </div>
+                        <span class="hidden md:inline font-medium">Ciao, ${state.currentUser.name}</span>
+                    </div>
+                    <button onclick="logout()" class="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-300 hover:text-white" title="Esci">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full grid grid-cols-1 lg:grid-cols-4 gap-8">
+            
+            <!-- COLONNA SINISTRA -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Box Prenotazione -->
+                <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                    <div class="bg-indigo-50 p-4 border-b border-indigo-100">
+                        <p class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Giorno Selezionato</p>
+                        <h2 class="text-lg font-bold text-indigo-900 capitalize">${formatDisplayDate(selectedDateStr)}</h2>
+                    </div>
+                    <div class="p-5">${bookingActionHtml}</div>
+                </div>
+
+                <!-- Box Occupazione -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-md font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <i data-lucide="building-2" class="w-5 h-5 text-indigo-600"></i>
+                        Presenze del ${state.selectedDate.getDate()}/${state.selectedDate.getMonth()+1}
+                    </h2>
+                    <div class="space-y-4">${floorStatsHtml}</div>
+                </div>
+
+                <!-- Box Limiti -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <h2 class="text-md font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
+                        I Tuoi Limiti (Mese)
+                    </h2>
+                    <div class="space-y-4">
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-sm font-medium text-slate-500">Giorni Totali</span>
+                                <span class="text-lg font-bold text-slate-800">${userBookingsThisMonth.length} <span class="text-xs text-slate-400">/ ${MAX_DAYS_PER_MONTH}</span></span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-1.5">
+                                <div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${(userBookingsThisMonth.length / MAX_DAYS_PER_MONTH) * 100}%"></div>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div class="flex justify-between items-end mb-2">
+                                <span class="text-sm font-medium text-slate-500">Venerdì</span>
+                                <span class="text-lg font-bold text-slate-800">${userFridaysThisMonth.length} <span class="text-xs text-slate-400">/ ${MAX_FRIDAYS_PER_MONTH}</span></span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-1.5">
+                                <div class="bg-indigo-400 h-1.5 rounded-full" style="width: ${(userFridaysThisMonth.length / MAX_FRIDAYS_PER_MONTH) * 100}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLONNA DESTRA (CALENDARIO) -->
+            <div class="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2 uppercase">
+                        <i data-lucide="calendar-days" class="w-6 h-6 text-indigo-600"></i>
+                        ${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
+                    </h2>
+                    <div class="flex gap-2">
+                        <button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors shadow-sm">Precedente</button>
+                        <button onclick="changeMonth(1)" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors shadow-sm">Successivo</button>
+                    </div>
+                </div>
+
+                <div class="p-6 flex-1">
+                    <div class="grid grid-cols-7 gap-4 mb-4">
+                        ${['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(d => `<div class="text-center font-bold text-slate-400 text-sm uppercase tracking-wider">${d}</div>`).join('')}
+                    </div>
+                    <div class="grid grid-cols-7 gap-3" id="calendar-grid">
+                        ${generateCalendarCellsHTML()}
+                    </div>
+                </div>
+            </div>
+        </main>`;
+    }
+
+    function generateCalendarCellsHTML() {
+        const year = state.currentMonthDate.getFullYear();
+        const month = state.currentMonthDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        let firstDay = new Date(year, month, 1).getDay();
+        firstDay = firstDay === 0 ? 6 : firstDay - 1; 
+        
+        let html = '';
+        const selectedDateStr = getLocalDateString(state.selectedDate);
+
+        // Celle vuote
+        for (let i = 0; i < firstDay; i++) {
+            html += `<div class="aspect-square rounded-xl bg-slate-50/50 border border-slate-100 opacity-50"></div>`;
+        }
+
+        // Giorni del mese
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateObj = new Date(year, month, day);
+            const dateStr = getLocalDateString(dateObj);
+            const dayOfWeek = dateObj.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isClosed = CLOSED_DAYS.includes(dateStr);
+            
+            const isSelected = selectedDateStr === dateStr;
+            const floorBookingsToday = state.bookings.filter(b => b.date === dateStr && b.floor === state.currentUser.floor);
+            const maxSw = FLOORS[state.currentUser.floor].maxSw;
+            const isFloorFull = floorBookingsToday.length >= maxSw;
+            const myBooking = state.bookings.find(b => b.date === dateStr && b.userId === state.currentUser.id);
+
+            let cellClass = `day-cell aspect-square p-2 rounded-xl border flex flex-col relative transition-all cursor-pointer ${isSelected ? 'ring-4 ring-indigo-300 ring-offset-1 border-indigo-500 z-10' : ''}`;
+            let contentClass = "";
+            let badgeHtml = "";
+
+            if (isClosed) {
+                cellClass += " bg-orange-50 border-orange-200";
+                contentClass = "text-orange-800";
+                badgeHtml = `<div class="text-[10px] font-bold bg-orange-100 text-orange-600 rounded px-1 py-1 text-center uppercase">Chiuso</div>`;
+            } else if (isWeekend) {
+                cellClass += " bg-slate-50 border-slate-200 opacity-60";
+                contentClass = "text-slate-400";
+            } else if (myBooking) {
+                cellClass += " bg-indigo-500 border-indigo-600 shadow-md shadow-indigo-200";
+                contentClass = "text-white";
+                badgeHtml = `<div class="text-xs font-semibold bg-white/20 text-white rounded px-2 py-1 text-center backdrop-blur-sm">Il tuo SW</div>`;
+            } else if (isFloorFull) {
+                cellClass += " bg-red-50 border-red-200 hover:bg-red-100";
+                contentClass = "text-red-900";
+                badgeHtml = `<div class="text-[10px] font-bold bg-red-100 text-red-700 rounded px-1 py-1 text-center uppercase flex justify-center items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i> Pieno</div>`;
+            } else {
+                cellClass += " bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50";
+                contentClass = "text-slate-700";
+                badgeHtml = `<div class="text-[10px] font-medium text-center ${isSelected ? 'text-indigo-600 font-bold' : 'text-slate-400'}">${floorBookingsToday.length} / ${maxSw} in SW</div>`;
+            }
+
+            const pointerIcon = (isSelected && !isWeekend && !isClosed) ? `<i data-lucide="mouse-pointer-click" class="w-4 h-4 ${myBooking ? 'text-white' : 'text-indigo-400'} animate-bounce"></i>` : '';
+
+            html += `
+                <div class="${cellClass}" data-date="${dateStr}">
+                    <div class="flex justify-between items-start">
+                        <span class="font-bold ${contentClass}">${day}</span>
+                        ${pointerIcon}
+                    </div>
+                    ${(!isWeekend || isClosed) ? `<div class="mt-auto pt-2 space-y-1">${badgeHtml}</div>` : ''}
+                </div>`;
+        }
+        return html;
+    }
+
+    function attachDashboardListeners() {
+        document.querySelectorAll('.day-cell').forEach(cell => {
+            cell.addEventListener('click', function() {
+                selectDate(this.getAttribute('data-date'));
+            });
+        });
+    }
+
+    // --- AVVIO APP ---
+    loadDataFromGoogleSheets();
+
+</script>
+</body>
+</html>
