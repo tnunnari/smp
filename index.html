@@ -1,61 +1,79 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio Smart Booking</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translate(-50%, -20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio Smart Booking</title>
+    <!-- Tailwind CSS per la grafica moderna -->
+<script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons per le icone del sistema -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+        /* Personalizzazione scrollbar e animazioni */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+@@ -21,66 +18,73 @@
+to { opacity: 1; transform: translate(-50%, 0); }
+}
 
         /* Overlay per il dettaglio */
-        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
-    </style>
+.modal-backdrop { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+</style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
 
-    <div id="app" class="w-full min-h-screen flex flex-col"></div>
-    <div id="notification-container" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none"></div>
+    <!-- Container principale dell'applicazione -->
+<div id="app" class="w-full min-h-screen flex flex-col"></div>
+    
+    <!-- Contenitore per le notifiche toast -->
+<div id="notification-container" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none"></div>
 
 <script>
-    // --- VARIABILI GLOBALI DINAMICHE ---
-    let USERS = [];
-    let FLOORS = {};
-    let CLOSED_DAYS = []; 
+    // ==========================================
+    // CONFIGURAZIONE DATABASE GOOGLE
+    // ==========================================
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH1QybtRWXgU7jdb-TzBFum_igBQsHv1JhMeGza0cxc68Hqr1C0PkdHCBokbaWfslN/exec"; 
 
-    const MAX_DAYS_PER_MONTH = 6;
-    const MAX_FRIDAYS_PER_MONTH = 2;
+    // --- VARIABILI GLOBALI ---
+    // --- VARIABILI GLOBALI DINAMICHE ---
+let USERS = [];
+let FLOORS = {};
+let CLOSED_DAYS = []; 
+
+const MAX_DAYS_PER_MONTH = 6;
+const MAX_FRIDAYS_PER_MONTH = 2;
 
     // --- STATO DELL'APP ---
-    const today = new Date();
-    const state = {
-        loginStep: 1,
-        loginUser: null,
-        currentUser: null,
-        isBoardView: false, 
+const today = new Date();
+const state = {
+loginStep: 1,
+loginUser: null,
+currentUser: null,
+isBoardView: false, 
+        showDayDetails: null,
         showDayDetails: null, // Memorizza la data del dettaglio da mostrare
-        currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
-        selectedDate: today,
+currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
+selectedDate: today,
+        bookings: [],
         bookings: [
             { id: 101, userId: 1, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "ARCHITETTURA" },
             { id: 102, userId: 4, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "ARCHITETTURA" },
             { id: 103, userId: 12, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "New Space" }
         ],
-        isLoading: true
-    };
+isLoading: true
+};
 
+    // --- CARICAMENTO DATI DAL DATABASE GOOGLE ---
     // --- CONNESSIONE AL GOOGLE SHEET (SIMULATA) ---
-    async function loadDataFromGoogleSheets() {
+async function loadDataFromGoogleSheets() {
+        try {
+            state.isLoading = true;
+            render();
+
+            const response = await fetch(SCRIPT_URL + "?action=getData");
+            const data = await response.json();
+
+            USERS = data.users;
+            CLOSED_DAYS = data.closures;
+            state.bookings = data.bookings;
         setTimeout(() => {
             USERS = [
                 { id: 1, name: "Barakat Charles", floor: "ARCHITETTURA", password: "1234" },
@@ -81,67 +99,68 @@
                 `${today.getFullYear()}-05-01` 
             ];
 
-            calculateDynamicFloors();
+calculateDynamicFloors();
+state.isLoading = false;
+render();
+        } catch (error) {
+            console.error("Errore di sincronizzazione:", error);
+            showNotification("Errore di connessione al database Google.", "error");
             state.isLoading = false;
             render();
+        }
         }, 800); 
+}
+
+function calculateDynamicFloors() {
+@@ -99,24 +103,6 @@
+});
+}
+
+    async function syncBookingWithGoogle(bookingData, actionType) {
+        try {
+            await fetch(SCRIPT_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: actionType,
+                    booking: bookingData
+                })
+            });
+            return true;
+        } catch (e) {
+            console.error("Sync Error:", e);
+            return false;
+        }
     }
 
-    function calculateDynamicFloors() {
-        FLOORS = {};
-        USERS.forEach(user => {
-            if (!FLOORS[user.floor]) {
-                FLOORS[user.floor] = { total: 0, maxSw: 0 };
-            }
-            FLOORS[user.floor].total += 1;
-        });
-
-        Object.keys(FLOORS).forEach(floorName => {
-            let limit = Math.round(FLOORS[floorName].total * 0.30);
-            if (limit < 1 && FLOORS[floorName].total > 0) limit = 1; 
-            FLOORS[floorName].maxSw = limit;
-        });
-    }
-
-    // --- HELPER FUNZIONI ---
-    function getLocalDateString(dateObj) {
-        const year = dateObj.getFullYear();
-        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const day = String(dateObj.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    function isFriday(dateString) {
-        const parts = dateString.split('-');
-        return new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]).getDay() === 5;
-    }
-
-    function formatDisplayDate(dateStr) {
-        const parts = dateStr.split('-');
-        const dateObj = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
-        return dateObj.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    }
-
-    function showNotification(message, type = 'error') {
-        const container = document.getElementById('notification-container');
-        const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
-        const icon = type === 'error' ? 'x-circle' : 'check-circle-2';
+// --- HELPER FUNZIONI ---
+function getLocalDateString(dateObj) {
+const year = dateObj.getFullYear();
+@@ -140,11 +126,14 @@
+const container = document.getElementById('notification-container');
+const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
+const icon = type === 'error' ? 'x-circle' : 'check-circle-2';
         
-        const toast = document.createElement('div');
-        toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 mb-2`;
-        toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><p class="font-medium">${message}</p>`;
+const toast = document.createElement('div');
+toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 mb-2`;
+toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><p class="font-medium">${message}</p>`;
         
-        container.appendChild(toast);
-        lucide.createIcons({ root: toast });
+container.appendChild(toast);
+lucide.createIcons({ root: toast });
         
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
-    }
+setTimeout(() => {
+toast.style.opacity = '0';
+toast.style.transition = 'opacity 0.3s ease';
+@@ -153,186 +142,606 @@
+}
 
-    function getCapacityColorLevels(percentage) {
+function getCapacityColorLevels(percentage) {
+        // CORREZIONE: Gestione precisa del 100%
+        if (percentage === 0) return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
+        if (percentage < 50) return { bar: 'bg-yellow-400', badgeBg: 'bg-yellow-50', badgeText: 'text-yellow-800', badgeBorder: 'border-yellow-300' };
+        if (percentage < 100) return { bar: 'bg-orange-500', badgeBg: 'bg-orange-100', badgeText: 'text-orange-800', badgeBorder: 'border-orange-300' };
+        return { bar: 'bg-red-500', badgeBg: 'bg-red-50', badgeText: 'text-red-700', badgeBorder: 'border-red-200' };
         if (percentage === 0) {
             return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
         } else if (percentage < 50) {
@@ -164,21 +183,39 @@
         state.loginUser = null;
         state.loginStep = 1;
         render();
-    }
+}
 
-    function submitLogin() {
-        const pwdInput = document.getElementById('password-input').value;
+    // --- AZIONI ---
+    function selectLoginUser(userId) { state.loginUser = USERS.find(u => u.id == userId); state.loginStep = 2; render(); }
+    function cancelLogin() { state.loginUser = null; state.loginStep = 1; render(); }
+function submitLogin() {
+const pwdInput = document.getElementById('password-input').value;
+        if (String(pwdInput) === String(state.loginUser.password)) {
         if (pwdInput === state.loginUser.password) {
-            state.currentUser = state.loginUser;
-            state.loginStep = 1;
+state.currentUser = state.loginUser;
+state.loginStep = 1;
             state.loginUser = null;
             state.isBoardView = false;
-            render();
-        } else {
+render();
+} else {
+            showNotification("Password errata.", "error");
             showNotification("Password errata. Riprova.", "error");
-        }
-    }
+}
+}
+    function logout() { state.currentUser = null; state.isBoardView = false; state.showDayDetails = null; render(); }
+    function enterBoardView() { state.isBoardView = true; render(); }
+    function exitBoardView() { state.isBoardView = false; state.showDayDetails = null; render(); }
+    function openDayDetails(dateStr) { state.showDayDetails = dateStr; render(); }
+    function closeDayDetails() { state.showDayDetails = null; render(); }
+    function changeMonth(offset) { state.currentMonthDate = new Date(state.currentMonthDate.getFullYear(), state.currentMonthDate.getMonth() + offset, 1); render(); }
+    function selectDate(dateStr) { const parts = dateStr.split('-'); state.selectedDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]); render(); }
 
+    async function toggleBooking() {
+        const selectedDateStr = getLocalDateString(state.selectedDate);
+        // CORREZIONE: I weekend non sono più bloccati a meno che non siano nel foglio "Chiusure"
+        if (CLOSED_DAYS.includes(selectedDateStr)) { showNotification("Studio chiuso.", "error"); return; }
+
+        const existingIndex = state.bookings.findIndex(b => b.userId == state.currentUser.id && b.date === selectedDateStr);
     function handlePasswordKeypress(event) {
         if (event.key === 'Enter') submitLogin();
     }
@@ -227,7 +264,12 @@
     function toggleBooking() {
         const selectedDateStr = getLocalDateString(state.selectedDate);
         const dayOfWeek = state.selectedDate.getDay();
-        
+
+        if (existingIndex > -1) {
+            const bToRemove = state.bookings[existingIndex];
+            state.bookings.splice(existingIndex, 1);
+            showNotification("Annullamento in corso...", "success");
+            await syncBookingWithGoogle(bToRemove, "remove");
         if (dayOfWeek === 0 || dayOfWeek === 6) {
             showNotification("Non puoi prenotare lo Smart Working nel weekend.", "error"); return;
         }
@@ -239,10 +281,13 @@
         if (existingBookingIndex > -1) {
             state.bookings.splice(existingBookingIndex, 1);
             showNotification("Prenotazione annullata con successo.", "success");
-            render();
-            return;
-        }
+render();
+return;
+}
 
+        const monStr = selectedDateStr.substring(0, 7);
+        const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
+        if (userB.length >= MAX_DAYS_PER_MONTH) { showNotification(`Limite ${MAX_DAYS_PER_MONTH}gg raggiunto.`, "error"); return; }
         const currentMonthStr = selectedDateStr.substring(0, 7);
         const userBookingsThisMonth = state.bookings.filter(b => b.userId === state.currentUser.id && b.date.startsWith(currentMonthStr));
         
@@ -259,18 +304,29 @@
         const floorBookingsOnDate = state.bookings.filter(b => b.floor === state.currentUser.floor && b.date === selectedDateStr);
         const maxSwForFloor = FLOORS[state.currentUser.floor].maxSw;
 
+        const floorB = state.bookings.filter(b => b.floor === state.currentUser.floor && b.date === selectedDateStr);
+        if (floorB.length >= FLOORS[state.currentUser.floor].maxSw) { showNotification("Capacità piano esaurita.", "error"); return; }
         if (floorBookingsOnDate.length >= maxSwForFloor) {
             showNotification(`Il piano "${state.currentUser.floor}" ha raggiunto il limite per questa data (Max ${maxSwForFloor}).`, "error"); return;
         }
 
+        const newB = { id: Date.now(), userId: state.currentUser.id, name: state.currentUser.name, date: selectedDateStr, floor: state.currentUser.floor };
+        state.bookings.push(newB);
+        showNotification("Prenotazione in corso...", "success");
+        await syncBookingWithGoogle(newB, "add");
         state.bookings.push({ id: Date.now(), userId: state.currentUser.id, date: selectedDateStr, floor: state.currentUser.floor });
         showNotification("Smart Working prenotato con successo!", "success");
-        render();
-    }
+render();
+}
 
+    // --- RENDERING ---
     // --- MOTORE DI RENDERING ---
-    function render() {
-        const app = document.getElementById('app');
+function render() {
+const app = document.getElementById('app');
+        if (state.isLoading) { app.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-4"><i data-lucide="loader-2" class="w-12 h-12 text-indigo-600 animate-spin mb-4"></i><p class="text-slate-500 font-bold">Accesso al Database Google...</p></div>`; }
+        else if (state.isBoardView) { app.innerHTML = renderBoardScreen(); attachBoardListeners(); }
+        else if (!state.currentUser) { app.innerHTML = renderLoginScreen(); if (state.loginStep === 2) document.getElementById('password-input').focus(); }
+        else { app.innerHTML = renderDashboardScreen(); attachDashboardListeners(); }
         
         if (state.isLoading) {
             app.innerHTML = renderLoadingScreen();
@@ -285,8 +341,8 @@
             attachDashboardListeners();
         }
         
-        lucide.createIcons();
-    }
+lucide.createIcons();
+}
 
     function renderLoadingScreen() {
         return `
@@ -296,13 +352,16 @@
         </div>`;
     }
 
-    function renderLoginScreen() {
-        let contentHtml = '';
+function renderLoginScreen() {
+let contentHtml = '';
 
-        if (state.loginStep === 1) {
-            let userButtons = USERS.map(user => `
+if (state.loginStep === 1) {
+let userButtons = USERS.map(user => `
+                <button onclick="selectLoginUser(${user.id})" class="w-full flex items-center justify-between p-3 border rounded-xl hover:bg-indigo-50 transition-all group">
                 <button onclick="selectLoginUser(${user.id})" class="w-full flex items-center justify-between p-3 border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-300 transition-all group">
-                    <div class="flex items-center gap-4">
+                   <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">${user.name.charAt(0)}</div>
+                        <div class="text-left"><p class="font-bold text-slate-800">${user.name}</p><p class="text-xs text-slate-500">${user.floor}</p></div>
                         <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
                             ${user.name.charAt(0)}
                         </div>
@@ -310,10 +369,14 @@
                             <p class="font-bold text-slate-800 group-hover:text-indigo-900">${user.name}</p>
                             <p class="text-xs text-slate-500 font-medium">${user.floor}</p>
                         </div>
-                    </div>
+                   </div>
+                    <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300"></i>
                     <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300 group-hover:text-indigo-500"></i>
-                </button>
-            `).join('');
+               </button>
+           `).join('');
+            contentHtml = `<h2 class="text-sm font-bold text-slate-400 uppercase mb-4 text-center">Seleziona utente</h2><div class="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar mb-6">${userButtons}</div><div class="border-t pt-6"><button onclick="enterBoardView()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><i data-lucide="calendar" class="w-5 h-5"></i> Calendario SW Generale</button></div>`;
+        } else {
+            contentHtml = `<button onclick="cancelLogin()" class="text-sm text-indigo-600 font-bold mb-4 flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i> Indietro</button><div class="bg-indigo-50 rounded-xl p-4 mb-6 flex items-center gap-4"><div class="w-12 h-12 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-800 font-bold text-xl">${state.loginUser.name.charAt(0)}</div><div><p class="font-bold text-slate-800">${state.loginUser.name}</p><p class="text-sm text-slate-500">${state.loginUser.floor}</p></div></div><div class="space-y-4"><div><label class="block text-sm font-bold text-slate-700 mb-1">Password</label><input type="password" id="password-input" onkeypress="if(event.key==='Enter')submitLogin()" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"></div><button onclick="submitLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl">Accedi</button></div>`;
 
             contentHtml = `
                 <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 text-center">Seleziona utente</h2>
@@ -351,7 +414,8 @@
                     </button>
                 </div>
             `;
-        }
+}
+        return `<div class="flex-1 flex flex-col items-center justify-center p-4 py-12"><div class="max-w-md w-full bg-white rounded-2xl shadow-xl border overflow-hidden"><div class="bg-slate-900 p-8 text-center text-white"><i data-lucide="building-2" class="w-14 h-14 mx-auto mb-3"></i><h1 class="text-2xl font-bold">Studio Smart Booking</h1></div><div class="p-8">${contentHtml}</div></div></div>`;
 
         return `
         <div class="flex-1 flex flex-col items-center justify-center p-4 py-12">
@@ -366,11 +430,16 @@
                 </div>
             </div>
         </div>`;
-    }
+}
 
-    function renderBoardScreen() {
-        let modalHtml = "";
-        if (state.showDayDetails) {
+function renderBoardScreen() {
+let modalHtml = "";
+if (state.showDayDetails) {
+            const dayB = state.bookings.filter(b => b.date === state.showDayDetails);
+            let groups = Object.keys(FLOORS).map(f => {
+                const p = dayB.filter(b => b.floor === f);
+                if (p.length === 0) return "";
+                return `<div class="mb-4"><h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b pb-1">${f}</h4><div class="space-y-1">${p.map(b => `<div class="flex items-center gap-2 text-sm font-semibold text-slate-700 p-2 bg-slate-50 rounded-lg"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>${USERS.find(u=>u.id==b.userId)?.name || "Utente"}</div>`).join('')}</div></div>`;
             const dayBookings = state.bookings.filter(b => b.date === state.showDayDetails);
             
             // Raggruppa per piano
@@ -391,7 +460,8 @@
                         }).join('')}
                     </div>
                 </div>`;
-            }).join('');
+}).join('');
+            modalHtml = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onclick="closeDayDetails()"><div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" onclick="event.stopPropagation()"><div class="bg-slate-900 p-6 text-white flex justify-between items-center"><div><p class="text-xs font-bold text-slate-400 uppercase">Recap Presenze SW</p><h3 class="text-lg font-bold capitalize">${formatDisplayDate(state.showDayDetails)}</h3></div><button onclick="closeDayDetails()" class="p-2 hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-6 h-6"></i></button></div><div class="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">${groups || '<p class="text-center py-8 text-slate-400">Nessuna prenotazione.</p>'}</div></div></div>`;
 
             if (dayBookings.length === 0) groupingHtml = `<div class="text-center py-8 text-slate-400 font-medium">Nessuna prenotazione per questo giorno.</div>`;
 
@@ -415,7 +485,8 @@
                     </div>
                 </div>
             </div>`;
-        }
+}
+        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="calendar" class="w-6 h-6 text-emerald-400"></i><h1 class="font-bold text-lg">Calendario SW Generale</h1></div><button onclick="exitBoardView()" class="bg-slate-800 hover:bg-slate-700 text-sm font-bold py-2 px-4 rounded-lg">Esci</button></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full"><div class="bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm">Succ.</button></div></div><div class="p-6"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3" id="board-calendar-grid">${generateBoardCalendarCellsHTML()}</div></div></div></main>${modalHtml}`;
 
         return `
         <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
@@ -456,17 +527,21 @@
             </div>
         </main>
         ${modalHtml}`;
-    }
+}
 
-    function generateBoardCalendarCellsHTML() {
+function generateBoardCalendarCellsHTML() {
+        const year = state.currentMonthDate.getFullYear(), month = state.currentMonthDate.getMonth();
         const year = state.currentMonthDate.getFullYear();
         const month = state.currentMonthDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
+const daysInMonth = new Date(year, month + 1, 0).getDate();
+        let firstDay = new Date(year, month, 1).getDay(); firstDay = firstDay === 0 ? 6 : firstDay - 1;
         
         let firstDay = new Date(year, month, 1).getDay();
         firstDay = firstDay === 0 ? 6 : firstDay - 1; 
         
-        let html = '';
+let html = '';
+        let totalCap = 0; Object.keys(FLOORS).forEach(f => totalCap += FLOORS[f].maxSw);
+        for (let i = 0; i < firstDay; i++) html += `<div class="h-32 rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
 
         let totalStudioCapacity = 0;
         Object.keys(FLOORS).forEach(f => totalStudioCapacity += FLOORS[f].maxSw);
@@ -475,7 +550,11 @@
             html += `<div class="h-32 rounded-xl bg-slate-50/50 border border-slate-100 opacity-50"></div>`;
         }
 
-        for (let day = 1; day <= daysInMonth; day++) {
+for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = getLocalDateString(new Date(year, month, day)), dayB = state.bookings.filter(b => b.date === dateStr);
+            const perc = totalCap > 0 ? Math.round((dayB.length / totalCap) * 100) : 0, colors = getCapacityColorLevels(perc);
+            const isC = CLOSED_DAYS.includes(dateStr);
+            let cellCl = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
             const dateObj = new Date(year, month, day);
             const dateStr = getLocalDateString(dateObj);
             const dayOfWeek = dateObj.getDay();
@@ -488,7 +567,12 @@
 
             let cellClass = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
             let contentClass = "";
-            let innerHtml = "";
+let innerHtml = "";
+            if (isC) { cellCl += " bg-orange-50 border-orange-200"; innerHtml = `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded py-1 text-center uppercase">Chiuso</div>`; }
+            else {
+                // CORREZIONE: I colori ora seguono la saturazione reale e non vengono sovrascritti dal grigio dei weekend
+                cellCl += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md hover:-translate-y-1`;
+                innerHtml = `<div class="mt-1 space-y-0.5 overflow-hidden flex-1">${dayB.map(b => `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 rounded truncate shadow-sm mb-0.5">${USERS.find(u=>u.id==b.userId)?.name || "..." }</div>`).join('')}</div><div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase">${perc}% SAT</div>`;
 
             if (isClosed) {
                 cellClass += " bg-orange-50 border-orange-200";
@@ -516,7 +600,8 @@
                 } else {
                     innerHtml = `<div class="mt-auto text-[9px] font-medium text-slate-400 text-center italic pointer-events-none">Nessun dipendente</div>`;
                 }
-            }
+}
+            html += `<div class="${cellCl}" data-date="${dateStr}"><span class="font-bold text-xs ${isC ? 'text-orange-800' : colors.badgeText}">${day}</span>${innerHtml}</div>`;
 
             html += `
                 <div class="${cellClass}" data-date="${dateStr}">
@@ -525,11 +610,19 @@
                     </div>
                     ${innerHtml}
                 </div>`;
-        }
-        return html;
-    }
+}
+return html;
+}
 
-    function renderDashboardScreen() {
+function renderDashboardScreen() {
+        const dateStr = getLocalDateString(state.selectedDate), monStr = dateStr.substring(0, 7);
+        const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
+        const hasBooked = state.bookings.some(b => b.userId == state.currentUser.id && b.date === dateStr);
+        const isC = CLOSED_DAYS.includes(dateStr);
+        let floorStats = Object.keys(FLOORS).map(f => {
+            const booked = state.bookings.filter(b => b.date === dateStr && b.floor === f).length, max = FLOORS[f].maxSw;
+            const p = Math.min(Math.round((booked / max) * 100), 100), colors = getCapacityColorLevels(p);
+            return `<div class="p-3 bg-slate-50 rounded-xl border mb-2"><div class="flex justify-between mb-1"><span class="text-xs font-semibold text-slate-700">${f}</span><span class="text-xs font-bold text-slate-800">${p}%</span></div><div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden"><div class="h-full ${colors.bar}" style="width: ${p}%"></div></div></div>`;
         const selectedDateStr = getLocalDateString(state.selectedDate);
         const selectedMonthStr = selectedDateStr.substring(0, 7);
         
@@ -559,7 +652,9 @@
                         <div class="h-2 rounded-full transition-all duration-500 ${colors.bar}" style="width: ${displayPercentage}%"></div>
                     </div>
                 </div>`;
-        }).join('');
+}).join('');
+        let btn = isC ? `<div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-bold border">Studio Chiuso</div>` : `<button onclick="toggleBooking()" class="w-full py-4 px-4 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${hasBooked ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}">${hasBooked ? 'Annulla Smart Working' : 'Prenota Smart Working'}</button>`;
+        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="building-2" class="w-6 h-6 text-indigo-400"></i><h1 class="font-bold text-lg">Studio Smart Booking</h1></div><div class="flex items-center gap-4"><div class="flex items-center gap-2 text-sm"><div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold">${state.currentUser.name.charAt(0)}</div><span>${state.currentUser.name}</span></div><button onclick="logout()" class="p-2 hover:bg-slate-800 rounded-lg"><i data-lucide="log-out" class="w-5 h-5"></i></button></div></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full grid grid-cols-1 lg:grid-cols-4 gap-8"><div class="lg:col-span-1 space-y-6"><div class="bg-white rounded-2xl shadow-md border overflow-hidden"><div class="bg-indigo-50 p-4 border-b"><p class="text-xs font-bold text-indigo-400 uppercase mb-1">Giorno Selezionato</p><h2 class="text-lg font-bold capitalize">${formatDisplayDate(dateStr)}</h2></div><div class="p-5">${btn}</div></div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="building-2" class="w-4 h-4 text-indigo-600"></i>Occupazione Piani</h2>${floorStats}</div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-indigo-600"></i>I Tuoi Limiti (Mese)</h2><div class="p-3 bg-slate-50 rounded-xl border mb-2"><div class="flex justify-between items-end mb-1"><span class="text-xs">Giorni Totali</span><span class="text-xs font-bold">${userB.length} / ${MAX_DAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-600 h-1.5" style="width: ${(userB.length / MAX_DAYS_PER_MONTH) * 100}%"></div></div></div><div class="p-3 bg-slate-50 rounded-xl border"><div class="flex justify-between items-end mb-1"><span class="text-xs text-slate-500">Venerdì</span><span class="text-xs font-bold text-slate-800">${userB.filter(b=>isFriday(b.date)).length} / ${MAX_FRIDAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-400 h-1.5" style="width: ${(userB.filter(b=>isFriday(b.date)).length / MAX_FRIDAYS_PER_MONTH) * 100}%"></div></div></div></div></div><div class="lg:col-span-3 bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Succ.</button></div></div><div class="p-6 flex-1"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3">${generateCalendarCellsHTML()}</div></div></div></main>`;
 
         let bookingActionHtml = "";
         if (isSelectedClosed) {
@@ -660,12 +755,16 @@
                 </div>
             </div>
         </main>`;
-    }
+}
 
-    function generateCalendarCellsHTML() {
+function generateCalendarCellsHTML() {
+        const year = state.currentMonthDate.getFullYear(), month = state.currentMonthDate.getMonth();
         const year = state.currentMonthDate.getFullYear();
         const month = state.currentMonthDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
+const daysInMonth = new Date(year, month + 1, 0).getDate();
+        let firstDay = new Date(year, month, 1).getDay(); firstDay = firstDay === 0 ? 6 : firstDay - 1;
+        let html = ''; const selStr = getLocalDateString(state.selectedDate);
+        for (let i = 0; i < firstDay; i++) html += `<div class="aspect-square rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
         let firstDay = new Date(year, month, 1).getDay();
         firstDay = firstDay === 0 ? 6 : firstDay - 1; 
         let html = '';
@@ -673,7 +772,17 @@
         for (let i = 0; i < firstDay; i++) {
             html += `<div class="aspect-square rounded-xl bg-slate-50/50 border border-slate-100 opacity-50"></div>`;
         }
-        for (let day = 1; day <= daysInMonth; day++) {
+for (let day = 1; day <= daysInMonth; day++) {
+            const dObj = new Date(year, month, day), dStr = getLocalDateString(dObj), isSel = selStr === dStr;
+            const floorB = state.bookings.filter(b => b.date === dStr && b.floor === state.currentUser.floor);
+            const mSw = FLOORS[state.currentUser.floor].maxSw, myB = state.bookings.find(b => b.date === dStr && b.userId == state.currentUser.id);
+            const isC = CLOSED_DAYS.includes(dStr);
+            let p = Math.round((floorB.length / mSw) * 100); if (p > 100) p = 100;
+            const colors = getCapacityColorLevels(p);
+            let cCl = `day-cell aspect-square p-2 rounded-xl border flex flex-col relative transition-all cursor-pointer ${isSel ? 'ring-4 ring-indigo-300 ring-offset-1 border-indigo-500 z-10' : ''}`, contCl = "text-slate-700", bH = "";
+            
+            if (isC) { 
+                cCl += " bg-orange-50 border-orange-200"; contCl = "text-orange-800 font-bold"; bH = `<div class="text-[9px] font-bold bg-orange-100 text-orange-600 rounded px-1 text-center uppercase shadow-sm">Chiuso</div>`; 
             const dateObj = new Date(year, month, day);
             const dateStr = getLocalDateString(dateObj);
             const dayOfWeek = dateObj.getDay();
@@ -709,7 +818,17 @@
                 cellClass += " bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50";
                 contentClass = "text-slate-700";
                 badgeHtml = `<div class="text-[10px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} ${colors.badgeBorder} rounded-md py-1 border shadow-sm transition-colors">SW al ${percentage}%</div>`;
+}
+            else if (myB) { 
+                cCl += " bg-indigo-600 border-indigo-700 shadow-md"; contCl = "text-white font-bold"; bH = `<div class="text-[9px] font-bold bg-white text-indigo-700 rounded px-1 text-center shadow-sm">IL TUO SW</div>`; 
             }
+            else if (floorB.length >= mSw) { 
+                cCl += " bg-red-50 border-red-200"; contCl = "text-red-900 font-bold"; bH = `<div class="text-[9px] font-bold bg-red-500 text-white rounded px-1 text-center shadow-sm uppercase flex items-center justify-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Pieno</div>`; 
+            }
+            else { 
+                cCl += " bg-white border-slate-200 hover:border-indigo-400"; bH = `<div class="text-[9px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} rounded py-1 border ${colors.badgeBorder} shadow-sm">SW al ${p}%</div>`; 
+            }
+            html += `<div class="${cCl}" onclick="selectDate('${dStr}')"><span class="font-bold text-xs ${contCl}">${day}</span><div class="mt-auto pt-1">${bH}</div></div>`;
             const pointerIcon = (isSelected && !isWeekend && !isClosed) ? `<i data-lucide="mouse-pointer-click" class="w-4 h-4 ${myBooking ? 'text-white' : 'text-indigo-400'} animate-bounce"></i>` : '';
             html += `<div class="${cellClass}" data-date="${dateStr}">
                     <div class="flex justify-between items-start">
@@ -718,10 +837,15 @@
                     </div>
                     ${(!isWeekend || isClosed) ? `<div class="mt-auto pt-2 space-y-1">${badgeHtml}</div>` : ''}
                 </div>`;
-        }
-        return html;
-    }
+}
+return html;
+}
 
+    function attachDashboardListeners() { /* Click gestiti inline */ }
+    function attachBoardListeners() { 
+        document.querySelectorAll('.board-day-cell').forEach(c => {
+            c.onclick = () => openDayDetails(c.dataset.date);
+        }); 
     function attachDashboardListeners() {
         document.querySelectorAll('.day-cell').forEach(cell => {
             cell.addEventListener('click', function() {
@@ -736,12 +860,11 @@
                 openDayDetails(this.getAttribute('data-date'));
             });
         });
-    }
+}
 
-    loadDataFromGoogleSheets();
+loadDataFromGoogleSheets();
 
 </script>
 </body>
 </html>
-
 
