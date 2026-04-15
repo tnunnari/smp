@@ -39,11 +39,10 @@
         loginStep: 1,
         loginUser: null,
         currentUser: null,
-        isBoardView: false, // NUOVO STATO PER LA VISTA BOARD
+        isBoardView: false, 
         currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
         selectedDate: today,
         bookings: [
-            // Esempio fittizio iniziale
             { id: 101, userId: 1, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "ARCHITETTURA" },
             { id: 102, userId: 4, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "ARCHITETTURA" },
             { id: 103, userId: 12, date: getLocalDateString(new Date(today.getFullYear(), today.getMonth(), 15)), floor: "New Space" }
@@ -204,7 +203,7 @@
     }
 
     function selectDate(dateStr) {
-        if(state.isBoardView) return; // In vista board non si seleziona il giorno per prenotare
+        if(state.isBoardView) return; 
         const parts = dateStr.split('-');
         state.selectedDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
         render();
@@ -306,10 +305,9 @@
                     ${userButtons}
                 </div>
                 
-                <!-- NUOVO PULSANTE PER VISTA BOARD -->
                 <div class="border-t border-slate-200 pt-6">
                     <button onclick="enterBoardView()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2">
-                        <i data-lucide="eye" class="w-5 h-5"></i> Accesso Board (Vista Generale)
+                        <i data-lucide="calendar" class="w-5 h-5"></i> Calendario SW Generale
                     </button>
                 </div>
                 `;
@@ -354,19 +352,16 @@
         </div>`;
     }
 
-    // ==========================================
-    // NUOVA SCHERMATA: VISTA BOARD (GENERALE)
-    // ==========================================
     function renderBoardScreen() {
         return `
         <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
             <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 <div class="flex items-center gap-3">
-                    <i data-lucide="eye" class="w-6 h-6 text-emerald-400"></i>
-                    <h1 class="font-bold text-lg tracking-tight">Vista Generale (Board)</h1>
+                    <i data-lucide="calendar" class="w-6 h-6 text-emerald-400"></i>
+                    <h1 class="font-bold text-lg tracking-tight">Calendario SW Generale</h1>
                 </div>
                 <button onclick="exitBoardView()" class="bg-slate-800 hover:bg-slate-700 text-sm font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2">
-                    <i data-lucide="log-out" class="w-4 h-4"></i> Esci da Board
+                    <i data-lucide="log-out" class="w-4 h-4"></i> Esci
                 </button>
             </div>
         </header>
@@ -408,6 +403,10 @@
         
         let html = '';
 
+        // Calcolo capacità totale dello studio (somma dei massimi per piano)
+        let totalStudioCapacity = 0;
+        Object.keys(FLOORS).forEach(f => totalStudioCapacity += FLOORS[f].maxSw);
+
         for (let i = 0; i < firstDay; i++) {
             html += `<div class="h-32 rounded-xl bg-slate-50/50 border border-slate-100 opacity-50"></div>`;
         }
@@ -419,8 +418,11 @@
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isClosed = CLOSED_DAYS.includes(dateStr);
             
-            // Trovo chi si è prenotato in questo giorno
             const dayBookings = state.bookings.filter(b => b.date === dateStr);
+            
+            // Calcolo percentuale globale per questo giorno specifico
+            const globalPercentage = totalStudioCapacity > 0 ? Math.round((dayBookings.length / totalStudioCapacity) * 100) : 0;
+            const colors = getCapacityColorLevels(globalPercentage);
 
             let cellClass = `h-32 p-2 rounded-xl border flex flex-col relative transition-all `;
             let contentClass = "";
@@ -434,23 +436,22 @@
                 cellClass += " bg-slate-50 border-slate-200 opacity-60";
                 contentClass = "text-slate-400";
             } else {
-                cellClass += " bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md";
-                contentClass = "text-slate-700";
+                // APPLICAZIONE GRADIENTE ALLA CELLA GENERALE
+                cellClass += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md`;
+                contentClass = colors.badgeText;
                 
                 if (dayBookings.length > 0) {
-                    // Genero l'elenco dei nomi di chi è in SW
                     let namesHtml = dayBookings.map(b => {
                         const user = USERS.find(u => u.id === b.userId);
                         const name = user ? user.name : "Sconosciuto";
-                        // Uso un bordino leggero e il truncate per non far sbordare i nomi lunghi
-                        return `<div class="text-[10px] font-medium bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate" title="${name} (${user.floor})">${name}</div>`;
+                        return `<div class="text-[10px] font-medium bg-white/60 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate" title="${name} (${user.floor})">${name}</div>`;
                     }).join('');
                     
                     innerHtml = `
                     <div class="mt-2 space-y-1 overflow-y-auto custom-scrollbar flex-1 pr-1">
                         ${namesHtml}
                     </div>
-                    <div class="text-[9px] text-slate-400 text-right mt-1 font-bold">${dayBookings.length} in SW</div>`;
+                    <div class="text-[9px] ${colors.badgeText} text-right mt-1 font-bold">${globalPercentage}% Saturazione</div>`;
                 } else {
                     innerHtml = `<div class="mt-auto text-[10px] font-medium text-slate-400 text-center">Nessuno in SW</div>`;
                 }
@@ -467,9 +468,6 @@
         return html;
     }
 
-    // ==========================================
-    // SCHERMATA DASHBOARD DIPENDENTE
-    // ==========================================
     function renderDashboardScreen() {
         const selectedDateStr = getLocalDateString(state.selectedDate);
         const selectedMonthStr = selectedDateStr.substring(0, 7);
@@ -685,7 +683,6 @@
         });
     }
 
-    // --- AVVIO APP ---
     loadDataFromGoogleSheets();
 
 </script>
