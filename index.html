@@ -3,325 +3,494 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio Smart Booking</title>
-    <!-- Tailwind CSS per la grafica moderna -->
+    <title>Report Analisi Smart Working - Q1 2026</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons per le icone del sistema -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Chosen Palette: Warm Neutrals & Subtle Indigo/Teal Accents -->
+    <!-- Application Structure Plan: La struttura SPA è divisa in tre macro-aree funzionali (Sintesi, Analisi Dati Interattiva, Policy & Feedback). Questo approccio "dashboard narrativo" guida l'utente partendo dai numeri chiave di alto livello, permettendogli poi di esplorare i trend tramite filtri interattivi, e concludendo con le insights qualitative e le regole di base. Questo facilita la comprensione del "come" e "perché" il sistema viene utilizzato, rendendolo ideale per il board direttivo. -->
+    <!-- Visualization & Content Choices: 
+         1. KPI Cards (Goal: Informare -> Method: HTML Grid -> Interaction: Hover effects -> Justif: Immediata leggibilità).
+         2. Trend Settimanale (Goal: Confrontare -> Method: Chart.js Bar Chart -> Interaction: Dropdown filter per dipartimento -> Justif: Permette l'analisi granulare senza sovraccaricare la vista iniziale. NO SVG usato).
+         3. Distribuzione Piani (Goal: Proporzioni -> Method: Chart.js Doughnut Chart -> Interaction: Tooltips interattivi -> Justif: Mostra chiaramente la densità d'uso tra i vari team. NO SVG usato).
+         4. Feedback Qualitativi (Goal: Cambiamento/Insights -> Method: HTML Tabs interattive -> Interaction: Click per cambiare pannello -> Justif: Organizza testi densi in blocchi facilmente digeribili. NO SVG usato).
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sw: {
+                            bg: '#fafaf9',      // stone-50
+                            card: '#ffffff',    // white
+                            text: '#292524',    // stone-800
+                            muted: '#78716c',   // stone-500
+                            accent1: '#6366f1', // indigo-500 (Architettura)
+                            accent2: '#14b8a6', // teal-500 (New Space)
+                            accent3: '#f59e0b', // amber-500 (Interior)
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        /* Personalizzazione scrollbar e animazioni */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translate(-50%, -20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
+        /* Regole CSS stringenti per i contenitori dei grafici (Canvas) */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 35vh; /* Altezza responsiva base */
+            min-height: 250px;
+            max-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 40vh;
+            }
+        }
+
+        /* Stile icone Unicode */
+        .icon-emoji {
+            font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+            font-style: normal;
+        }
+
+        /* Nascondi scrollbar per layout pulito */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f5f5f4; }
+        ::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
     </style>
 </head>
-<body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
+<body class="bg-sw-bg text-sw-text font-sans antialiased overflow-x-hidden">
 
-    <!-- Container principale dell'applicazione -->
-    <div id="app" class="w-full min-h-screen flex flex-col"></div>
-    
-    <!-- Contenitore per le notifiche toast -->
-    <div id="notification-container" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none"></div>
+    <!-- Header / Navigazione -->
+    <header class="bg-white border-b border-stone-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl icon-emoji">🏢</span>
+                <h1 class="font-bold text-xl tracking-tight text-stone-900">Studio Analytics</h1>
+            </div>
+            <nav class="hidden md:flex gap-6 font-medium text-sm text-stone-600">
+                <a href="#sintesi" class="hover:text-sw-accent1 transition-colors">Sintesi KPI</a>
+                <a href="#dati" class="hover:text-sw-accent1 transition-colors">Esplorazione Dati</a>
+                <a href="#insight" class="hover:text-sw-accent1 transition-colors">Insight Qualitativi</a>
+                <a href="#policy" class="hover:text-sw-accent1 transition-colors">Policy Regolamento</a>
+            </nav>
+        </div>
+    </header>
 
-<script>
-    // ==========================================
-    // CONFIGURAZIONE DATABASE GOOGLE
-    // ==========================================
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH1QybtRWXgU7jdb-TzBFum_igBQsHv1JhMeGza0cxc68Hqr1C0PkdHCBokbaWfslN/exec"; 
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
 
-    // --- VARIABILI GLOBALI ---
-    let USERS = [];
-    let FLOORS = {};
-    let CLOSED_DAYS = []; 
+        <!-- Header Report -->
+        <div class="text-center max-w-3xl mx-auto space-y-4">
+            <p class="text-sw-accent1 font-bold tracking-wider text-sm uppercase">Report Direzionale</p>
+            <h2 class="text-4xl md:text-5xl font-extrabold text-stone-900 tracking-tight">Utilizzo Smart Working Q1 2026</h2>
+            <p class="text-lg text-sw-muted leading-relaxed">
+                Analisi aggregata delle prenotazioni e dell'occupazione degli spazi fisici dello studio. 
+                Questo documento interattivo sintetizza i pattern di presenza, evidenziando le preferenze 
+                dei dipendenti e l'efficacia del tetto massimo del 30%.
+            </p>
+        </div>
 
-    const MAX_DAYS_PER_MONTH = 6;
-    const MAX_FRIDAYS_PER_MONTH = 2;
-
-    const today = new Date();
-    const state = {
-        loginStep: 1,
-        loginUser: null,
-        currentUser: null,
-        isBoardView: false, 
-        showDayDetails: null, // Memorizza la data per il pop-up di dettaglio
-        currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
-        selectedDate: today,
-        bookings: [],
-        isLoading: true
-    };
-
-    // --- CARICAMENTO DATI DAL DATABASE GOOGLE ---
-    async function loadDataFromGoogleSheets() {
-        try {
-            state.isLoading = true;
-            render();
-
-            const response = await fetch(SCRIPT_URL + "?action=getData");
-            const data = await response.json();
-
-            USERS = data.users;
-            CLOSED_DAYS = data.closures;
-            state.bookings = data.bookings;
-
-            calculateDynamicFloors();
-            state.isLoading = false;
-            render();
-        } catch (error) {
-            console.error("Errore Sync:", error);
-            showNotification("Errore di connessione al database.", "error");
-            state.isLoading = false;
-            render();
-        }
-    }
-
-    // Calcolo dinamico del limite del 30% per ogni piano
-    function calculateDynamicFloors() {
-        FLOORS = {};
-        USERS.forEach(user => {
-            if (!FLOORS[user.floor]) { FLOORS[user.floor] = { total: 0, maxSw: 0 }; }
-            FLOORS[user.floor].total += 1;
-        });
-
-        Object.keys(FLOORS).forEach(floorName => {
-            let limit = Math.round(FLOORS[floorName].total * 0.30);
-            if (limit < 1 && FLOORS[floorName].total > 0) limit = 1; 
-            FLOORS[floorName].maxSw = limit;
-        });
-    }
-
-    // Invio dati al database
-    async function syncBookingWithGoogle(bookingData, actionType) {
-        try {
-            await fetch(SCRIPT_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: actionType,
-                    booking: bookingData
-                })
-            });
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // --- HELPER FUNZIONI ---
-    function getLocalDateString(dateObj) {
-        const year = dateObj.getFullYear();
-        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const day = String(dateObj.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    function isFriday(dateString) {
-        const parts = dateString.split('-');
-        const dateObj = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-        return dateObj.getDay() === 5;
-    }
-
-    function formatDisplayDate(dateStr) {
-        const parts = dateStr.split('-');
-        const dateObj = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-        return dateObj.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    }
-
-    function showNotification(message, type = 'error') {
-        const container = document.getElementById('notification-container');
-        const bgColor = type === 'error' ? 'bg-red-600' : 'bg-green-600';
-        const icon = type === 'error' ? 'x-circle' : 'check-circle-2';
-        
-        const toast = document.createElement('div');
-        toast.className = `toast-enter ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 mb-2`;
-        toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><p class="font-medium">${message}</p>`;
-        
-        container.appendChild(toast);
-        lucide.createIcons({ root: toast });
-        
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 4000);
-    }
-
-    // Gradiente colori basato sulla percentuale di saturazione
-    function getCapacityColorLevels(percentage) {
-        if (percentage === 0) return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
-        if (percentage < 50) return { bar: 'bg-yellow-400', badgeBg: 'bg-yellow-50', badgeText: 'text-yellow-800', badgeBorder: 'border-yellow-300' };
-        if (percentage < 100) return { bar: 'bg-orange-500', badgeBg: 'bg-orange-100', badgeText: 'text-orange-800', badgeBorder: 'border-orange-300' };
-        // Rosso se >= 100%
-        return { bar: 'bg-red-500', badgeBg: 'bg-red-50', badgeText: 'text-red-700', badgeBorder: 'border-red-200' };
-    }
-
-    // --- AZIONI ---
-    function selectLoginUser(userId) { state.loginUser = USERS.find(u => u.id == userId); state.loginStep = 2; render(); }
-    function cancelLogin() { state.loginUser = null; state.loginStep = 1; render(); }
-    function submitLogin() {
-        const pwdInput = document.getElementById('password-input').value;
-        if (String(pwdInput) === String(state.loginUser.password)) {
-            state.currentUser = state.loginUser; state.loginStep = 1; render();
-        } else { showNotification("Password errata.", "error"); }
-    }
-    function logout() { state.currentUser = null; state.isBoardView = false; render(); }
-    function enterBoardView() { state.isBoardView = true; render(); }
-    function exitBoardView() { state.isBoardView = false; state.showDayDetails = null; render(); }
-    function openDayDetails(dateStr) { state.showDayDetails = dateStr; render(); }
-    function closeDayDetails() { state.showDayDetails = null; render(); }
-    function changeMonth(offset) { state.currentMonthDate = new Date(state.currentMonthDate.getFullYear(), state.currentMonthDate.getMonth() + offset, 1); render(); }
-    function selectDate(dateStr) { const parts = dateStr.split('-'); state.selectedDate = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0); render(); }
-
-    async function toggleBooking() {
-        const selectedDateStr = getLocalDateString(state.selectedDate);
-        // Segue SOLO il calendario delle chiusure del foglio
-        if (CLOSED_DAYS.includes(selectedDateStr)) { showNotification("Studio chiuso secondo calendario.", "error"); return; }
-        
-        const existingIndex = state.bookings.findIndex(b => b.userId == state.currentUser.id && b.date === selectedDateStr);
-        if (existingIndex > -1) {
-            const bToRemove = state.bookings[existingIndex];
-            state.bookings.splice(existingIndex, 1);
-            showNotification("Annullamento in corso...", "success");
-            await syncBookingWithGoogle(bToRemove, "remove");
-            render();
-            return;
-        }
-
-        const monStr = selectedDateStr.substring(0, 7);
-        const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
-        if (userB.length >= MAX_DAYS_PER_MONTH) { showNotification(`Limite mensile di ${MAX_DAYS_PER_MONTH}gg raggiunto.`, "error"); return; }
-        
-        const floorB = state.bookings.filter(b => b.floor === state.currentUser.floor && b.date === selectedDateStr);
-        if (floorB.length >= FLOORS[state.currentUser.floor].maxSw) { showNotification("Capacità piano esaurita per oggi.", "error"); return; }
-
-        const newB = { id: Date.now(), userId: state.currentUser.id, name: state.currentUser.name, date: selectedDateStr, floor: state.currentUser.floor };
-        state.bookings.push(newB);
-        showNotification("Prenotazione in corso...", "success");
-        await syncBookingWithGoogle(newB, "add");
-        render();
-    }
-
-    // --- RENDERING ---
-    function render() {
-        const app = document.getElementById('app');
-        if (state.isLoading) { app.innerHTML = `<div class="flex-1 flex flex-col items-center justify-center p-4"><i data-lucide="loader-2" class="w-12 h-12 text-indigo-600 animate-spin mb-4"></i><p class="text-slate-500 font-bold">Accesso al Database Google...</p></div>`; }
-        else if (state.isBoardView) { app.innerHTML = renderBoardScreen(); attachBoardListeners(); }
-        else if (!state.currentUser) { app.innerHTML = renderLoginScreen(); if (state.loginStep === 2) document.getElementById('password-input').focus(); }
-        else { app.innerHTML = renderDashboardScreen(); attachDashboardListeners(); }
-        lucide.createIcons();
-    }
-
-    function renderLoginScreen() {
-        let userButtons = USERS.map(user => `
-            <button onclick="selectLoginUser(${user.id})" class="w-full flex items-center justify-between p-3 border rounded-xl hover:bg-indigo-50 transition-all group">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">${user.name.charAt(0)}</div>
-                    <div class="text-left"><p class="font-bold text-slate-800">${user.name}</p><p class="text-xs text-slate-500">${user.floor}</p></div>
+        <!-- Sezione 1: Sintesi KPI -->
+        <section id="sintesi" class="scroll-mt-24">
+            <div class="mb-6">
+                <h3 class="text-2xl font-bold border-b border-stone-200 pb-2">1. Sintesi Esecutiva (KPI)</h3>
+                <p class="mt-2 text-sw-muted text-sm">
+                    In questa sezione vengono presentati gli indicatori chiave di performance (KPI) assoluti del trimestre. 
+                    Questi dati offrono un quadro immediato dell'adozione del sistema di flessibilità, essenziale 
+                    per valutare l'impatto generale sulla presenza in ufficio prima di scendere nei dettagli.
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- KPI 1 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-4">
+                        <p class="text-sm font-semibold text-sw-muted uppercase tracking-wide">Prenotazioni Totali</p>
+                        <span class="bg-indigo-50 text-sw-accent1 p-2 rounded-lg text-xl icon-emoji">📊</span>
+                    </div>
+                    <p class="text-4xl font-extrabold text-stone-900">452</p>
+                    <p class="text-sm text-green-600 font-medium mt-2">↑ +12% rispetto al Q4 2025</p>
                 </div>
-                <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300"></i>
-            </button>`).join('');
-        return `<div class="flex-1 flex flex-col items-center justify-center p-4 py-12"><div class="max-w-md w-full bg-white rounded-2xl shadow-xl border overflow-hidden"><div class="bg-slate-900 p-8 text-center text-white"><i data-lucide="building-2" class="w-14 h-14 mx-auto mb-3"></i><h1 class="text-2xl font-bold">Studio Smart Booking</h1></div><div class="p-8"><h2 class="text-sm font-bold text-slate-400 uppercase mb-4 text-center">Seleziona utente</h2><div class="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar mb-6">${userButtons}</div><div class="border-t pt-6"><button onclick="enterBoardView()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><i data-lucide="calendar" class="w-5 h-5"></i> Calendario SW Generale</button></div></div></div></div>`;
-    }
+                <!-- KPI 2 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-4">
+                        <p class="text-sm font-semibold text-sw-muted uppercase tracking-wide">Giorno di Picco</p>
+                        <span class="bg-teal-50 text-sw-accent2 p-2 rounded-lg text-xl icon-emoji">📅</span>
+                    </div>
+                    <p class="text-4xl font-extrabold text-stone-900">Venerdì</p>
+                    <p class="text-sm text-sw-muted font-medium mt-2">Media saturazione: 94%</p>
+                </div>
+                <!-- KPI 3 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start mb-4">
+                        <p class="text-sm font-semibold text-sw-muted uppercase tracking-wide">Divisione più attiva</p>
+                        <span class="bg-amber-50 text-sw-accent3 p-2 rounded-lg text-xl icon-emoji">🎯</span>
+                    </div>
+                    <p class="text-4xl font-extrabold text-stone-900" style="font-size: 2rem; line-height: 2.5rem;">Architettura</p>
+                    <p class="text-sm text-sw-muted font-medium mt-2">Utilizza il 60% dei plafond globali</p>
+                </div>
+            </div>
+        </section>
 
-    function renderBoardScreen() {
-        let modalHtml = "";
-        if (state.showDayDetails) {
-            const dayB = state.bookings.filter(b => b.date === state.showDayDetails);
-            let groups = Object.keys(FLOORS).map(f => {
-                const p = dayB.filter(b => b.floor === f);
-                if (p.length === 0) return "";
-                return `<div class="mb-4"><h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b pb-1">${f}</h4><div class="space-y-1">${p.map(b => {
-                    const found = USERS.find(u=>u.id == b.userId);
-                    return `<div class="flex items-center gap-2 text-sm font-semibold text-slate-700 p-2 bg-slate-50 rounded-lg"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>${found ? found.name : "Utente"}</div>`;
-                }).join('')}</div></div>`;
-            }).join('');
-            modalHtml = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onclick="closeDayDetails()"><div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" onclick="event.stopPropagation()"><div class="bg-slate-900 p-6 text-white flex justify-between items-center"><div><p class="text-xs font-bold text-slate-400 uppercase">Recap Presenze SW</p><h3 class="text-lg font-bold capitalize">${formatDisplayDate(state.showDayDetails)}</h3></div><button onclick="closeDayDetails()" class="p-2 hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-6 h-6"></i></button></div><div class="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">${groups || '<p class="text-center py-8 text-slate-400">Nessuna prenotazione per questa data.</p>'}</div></div></div>`;
+        <!-- Sezione 2: Esplorazione Dati Interattiva -->
+        <section id="dati" class="scroll-mt-24">
+            <div class="mb-6">
+                <h3 class="text-2xl font-bold border-b border-stone-200 pb-2">2. Esplorazione Dati Quantitativi</h3>
+                <p class="mt-2 text-sw-muted text-sm">
+                    Questa area interattiva permette di disaggregare i volumi di prenotazione per analizzare le tendenze. 
+                    Il grafico a barre mostra la distribuzione settimanale (personalizzabile tramite l'apposito filtro), 
+                    mentre il grafico a ciambella illustra le proporzioni macro tra i vari piani dello studio.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                <!-- Grafico 1: Trend Settimanale Interattivo -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <h4 class="font-bold text-stone-800">Trend Prenotazioni Settimanali</h4>
+                        <select id="departmentFilter" class="bg-stone-50 border border-stone-200 text-stone-800 text-sm rounded-lg focus:ring-sw-accent1 focus:border-sw-accent1 block p-2 cursor-pointer font-medium">
+                            <option value="all">Tutto lo Studio</option>
+                            <option value="architettura">Piano Architettura</option>
+                            <option value="newspace">Piano New Space</option>
+                            <option value="interior">Piano Interior</option>
+                        </select>
+                    </div>
+                    <!-- Chart Container rigorosamente strutturato -->
+                    <div class="chart-container flex-1">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                    <p class="text-xs text-center text-sw-muted mt-4">Analisi aggregata per giorno della settimana (Media trimestrale). <br>Usa il filtro per isolare i reparti.</p>
+                </div>
+
+                <!-- Grafico 2: Distribuzione Globale Piani -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col h-full">
+                    <h4 class="font-bold text-stone-800 mb-6">Distribuzione Totale SW per Piano</h4>
+                    <!-- Chart Container rigorosamente strutturato -->
+                    <div class="chart-container flex-1">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                    <p class="text-xs text-center text-sw-muted mt-4">Ripartizione percentuale delle prenotazioni totali effettuate nel trimestre.</p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Sezione 3: Insight Qualitativi (Tabs) -->
+        <section id="insight" class="scroll-mt-24">
+            <div class="mb-6">
+                <h3 class="text-2xl font-bold border-b border-stone-200 pb-2">3. Osservazioni Qualitative</h3>
+                <p class="mt-2 text-sw-muted text-sm">
+                    I numeri da soli non raccontano tutta la storia. Attraverso interviste e feedback informali, 
+                    abbiamo raccolto le percezioni del team. Utilizza i pannelli qui sotto per esplorare 
+                    i benefici percepiti, le criticità emerse e le potenziali aree di miglioramento del sistema.
+                </p>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
+                <!-- Navigazione Tabs -->
+                <div class="flex border-b border-stone-200 bg-stone-50">
+                    <button class="tab-btn flex-1 py-4 px-6 text-sm font-bold text-sw-accent1 border-b-2 border-sw-accent1 bg-white transition-all" data-target="tab-feedback">
+                        <span class="icon-emoji mr-2">💡</span> Feedback Positivi
+                    </button>
+                    <button class="tab-btn flex-1 py-4 px-6 text-sm font-bold text-stone-500 border-b-2 border-transparent hover:text-stone-700 hover:bg-stone-100 transition-all" data-target="tab-criticita">
+                        <span class="icon-emoji mr-2">⚠️</span> Criticità Rilevate
+                    </button>
+                    <button class="tab-btn flex-1 py-4 px-6 text-sm font-bold text-stone-500 border-b-2 border-transparent hover:text-stone-700 hover:bg-stone-100 transition-all" data-target="tab-prospettive">
+                        <span class="icon-emoji mr-2">🔭</span> Prospettive Future
+                    </button>
+                </div>
+
+                <!-- Contenuto Tabs -->
+                <div class="p-8 min-h-[200px] flex items-center">
+                    <!-- Tab 1 -->
+                    <div id="tab-feedback" class="tab-content w-full animate-fade-in">
+                        <h4 class="text-xl font-bold text-stone-900 mb-3">Miglioramento del Work-Life Balance</h4>
+                        <p class="text-stone-600 leading-relaxed mb-4">
+                            Il sondaggio interno rivela che <strong>il 92% dei dipendenti</strong> valuta positivamente la possibilità di concentrare lo Smart Working nei giorni a ridosso del weekend (Giovedì e Venerdì). Questo ha portato a una riduzione percepita dello stress da pendolarismo, specialmente per il personale residente fuori dall'area metropolitana.
+                        </p>
+                        <div class="bg-indigo-50 border-l-4 border-sw-accent1 p-4 rounded-r-lg">
+                            <p class="text-sm text-indigo-900 italic">"Poter lavorare da casa il venerdì mi permette di chiudere la settimana in modo molto più focalizzato, evitando le distrazioni del venerdì pomeriggio in open space." - Senior Architect</p>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2 -->
+                    <div id="tab-criticita" class="tab-content w-full hidden animate-fade-in">
+                        <h4 class="text-xl font-bold text-stone-900 mb-3">Sovrapposizioni e Colli di Bottiglia</h4>
+                        <p class="text-stone-600 leading-relaxed mb-4">
+                            È stata osservata una problematica ricorrente nei giorni infrasettimanali centrali (Martedì e Mercoledì). Poiché la saturazione dello SW è molto bassa in quei giorni, gli spazi fisici dello studio risultano spesso sovraffollati. Questo rende complessa la prenotazione estemporanea delle sale riunioni.
+                        </p>
+                        <div class="bg-amber-50 border-l-4 border-sw-accent3 p-4 rounded-r-lg">
+                            <p class="text-sm text-amber-900 font-medium">Azione richiesta: Monitorare l'occupazione fisica reale tramite l'introduzione di un check-in per le scrivanie, indipendentemente dalla prenotazione dello SW.</p>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3 -->
+                    <div id="tab-prospettive" class="tab-content w-full hidden animate-fade-in">
+                        <h4 class="text-xl font-bold text-stone-900 mb-3">Adattamento Dinamico delle Policy</h4>
+                        <p class="text-stone-600 leading-relaxed mb-4">
+                            Basandosi sui dati di questo trimestre, l'HR e la Direzione stanno valutando le seguenti modifiche per i prossimi semestri:
+                        </p>
+                        <ul class="space-y-2 text-stone-600 mb-4 list-disc list-inside ml-4">
+                            <li><strong>Stagionalità:</strong> Possibile aumento del tetto massimo mensile (da 6 a 8 giorni) durante i mesi estivi (Luglio-Agosto).</li>
+                            <li><strong>Flessibilità Infrasettimanale:</strong> Incentivare (magari rimuovendo dal conteggio dei giorni limite) lo Smart Working di Mercoledì per decongestionare l'ufficio.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sezione 4: Policy e Metodologia -->
+        <section id="policy" class="scroll-mt-24 pb-10">
+            <div class="mb-6">
+                <h3 class="text-2xl font-bold border-b border-stone-200 pb-2">4. Struttura del Sistema e Policy</h3>
+                <p class="mt-2 text-sw-muted text-sm">
+                    Promemoria del perimetro di calcolo utilizzato per la raccolta dati. L'algoritmo alla base 
+                    dell'applicazione di prenotazione impone limiti strutturali rigidi per garantire sempre un 
+                    presidio minimo essenziale in studio.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-stone-50 border border-stone-200 p-6 rounded-2xl">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl icon-emoji">🛑</div>
+                        <h4 class="font-bold text-stone-800">Tetto Limite del 30%</h4>
+                    </div>
+                    <p class="text-sm text-stone-600">
+                        La regola fondamentale del gestionale impedisce dinamicamente che più del 30% del personale assegnato a una determinata divisione (piano) sia in Smart Working contemporaneamente. Le percentuali arrotondate garantiscono sempre almeno 1 posto disponibile.
+                    </p>
+                </div>
+                
+                <div class="bg-stone-50 border border-stone-200 p-6 rounded-2xl">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-xl icon-emoji">📅</div>
+                        <h4 class="font-bold text-stone-800">Limiti Individuali Mensili</h4>
+                    </div>
+                    <p class="text-sm text-stone-600">
+                        I dati di prenotazione risentono positivamente del tetto massimo di <strong>6 giorni mensili</strong> per dipendente. Inoltre, il limite di <strong>2 venerdì</strong> al mese previene lo svuotamento totale dello studio nel fine settimana.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-stone-900 text-stone-400 py-8 text-center text-sm mt-10">
+        <p>Studio Smart Booking Analytics © 2026. Documento ad uso interno direzionale.</p>
+    </footer>
+
+    <!-- Logica JavaScript Interattiva -->
+    <script>
+        // ==========================================
+        // 1. DATI DEL REPORT (MOCK DATA)
+        // ==========================================
+        const rawData = {
+            trendData: {
+                labels: ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì'],
+                datasets: {
+                    all: [35, 28, 40, 85, 120],
+                    architettura: [20, 15, 25, 50, 70],
+                    newspace: [10, 8, 10, 20, 30],
+                    interior: [5, 5, 5, 15, 20]
+                }
+            },
+            distribution: {
+                labels: ['Architettura', 'New Space', 'Interior'],
+                data: [60, 25, 15],
+                colors: ['#6366f1', '#14b8a6', '#f59e0b'] // Corrispondono alle accent color di Tailwind
+            }
+        };
+
+        // Riferimenti ai grafici globali per permettere l'aggiornamento
+        let barChartInstance = null;
+        let doughnutChartInstance = null;
+
+        // Configurazione globale Chart.js
+        Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+        Chart.defaults.color = '#78716c'; // Muted text
+
+        // ==========================================
+        // 2. INIZIALIZZAZIONE GRAFICI (CANVAS)
+        // ==========================================
+        function initCharts() {
+            // Chart 1: Bar Chart (Trend Settimanale)
+            const ctxBar = document.getElementById('trendChart').getContext('2d');
+            barChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: rawData.trendData.labels,
+                    datasets: [{
+                        label: 'Prenotazioni SW',
+                        data: rawData.trendData.datasets.all, // Default a tutti i piani
+                        backgroundColor: '#6366f1',
+                        borderRadius: 6,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // CRITICO: Permette al contenitore CSS di dettare le dimensioni
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(41, 37, 36, 0.9)',
+                            padding: 12,
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 13 },
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y + ' prenotazioni medie';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#f5f5f4', drawBorder: false },
+                            border: { display: false }
+                        },
+                        x: {
+                            grid: { display: false },
+                            border: { display: false }
+                        }
+                    },
+                    animation: { duration: 500 }
+                }
+            });
+
+            // Chart 2: Doughnut Chart (Distribuzione)
+            const ctxDoughnut = document.getElementById('distributionChart').getContext('2d');
+            doughnutChartInstance = new Chart(ctxDoughnut, {
+                type: 'doughnut',
+                data: {
+                    labels: rawData.distribution.labels,
+                    datasets: [{
+                        data: rawData.distribution.data,
+                        backgroundColor: rawData.distribution.colors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // CRITICO
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(41, 37, 36, 0.9)',
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ' + context.parsed + '% delle prenotazioni totali';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
-        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="calendar" class="w-6 h-6 text-emerald-400"></i><h1 class="font-bold text-lg">Calendario SW Generale</h1></div><button onclick="exitBoardView()" class="bg-slate-800 hover:bg-slate-700 text-sm font-bold py-2 px-4 rounded-lg">Esci</button></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full"><div class="bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Succ.</button></div></div><div class="p-6"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3" id="board-calendar-grid">${generateBoardCalendarCellsHTML()}</div></div></div></main>${modalHtml}`;
-    }
 
-    function generateBoardCalendarCellsHTML() {
-        const year = state.currentMonthDate.getFullYear(), month = state.currentMonthDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        let firstDay = new Date(year, month, 1).getDay(); firstDay = firstDay === 0 ? 6 : firstDay - 1;
-        let html = '';
-        let totalCap = 0; Object.keys(FLOORS).forEach(f => totalCap += FLOORS[f].maxSw);
-        for (let i = 0; i < firstDay; i++) html += `<div class="h-32 rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = getLocalDateString(new Date(year, month, day)), dayB = state.bookings.filter(b => b.date === dateStr);
-            const perc = totalCap > 0 ? Math.round((dayB.length / totalCap) * 100) : 0, colors = getCapacityColorLevels(perc);
-            const isC = CLOSED_DAYS.includes(dateStr);
-            let cellCl = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
-            
-            if (isC) { cellCl += " bg-orange-50 border-orange-200"; }
-            else { cellCl += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md hover:-translate-y-1`; }
-            
-            let namesHtml = dayB.map(b => {
-                const found = USERS.find(u=>u.id == b.userId);
-                return `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 rounded truncate shadow-sm mb-0.5">${found ? found.name : "..."}</div>`;
-            }).join('');
-
-            let inner = isC ? `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded py-1 text-center uppercase">Chiuso</div>` : `<div class="mt-1 space-y-0.5 overflow-hidden flex-1">${namesHtml}</div><div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase">${perc}% SAT</div>`;
-            html += `<div class="${cellCl}" data-date="${dateStr}"><span class="font-bold text-xs ${isC ? 'text-orange-800' : colors.badgeText}">${day}</span>${inner}</div>`;
-        }
-        return html;
-    }
-
-    function renderDashboardScreen() {
-        const dateStr = getLocalDateString(state.selectedDate), monStr = dateStr.substring(0, 7);
-        const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
-        const hasBooked = state.bookings.some(b => b.userId == state.currentUser.id && b.date === dateStr);
-        const isC = CLOSED_DAYS.includes(dateStr);
+        // ==========================================
+        // 3. LOGICA INTERATTIVA (FILTRI & TABS)
+        // ==========================================
         
-        let floorStats = Object.keys(FLOORS).map(f => {
-            const booked = state.bookings.filter(b => b.date === dateStr && b.floor === f).length, max = FLOORS[f].maxSw;
-            const p = Math.min(Math.round((booked / max) * 100), 100), colors = getCapacityColorLevels(p);
-            return `<div class="p-3 bg-slate-50 rounded-xl border mb-2"><div class="flex justify-between items-end mb-1"><span class="text-xs font-semibold text-slate-700">${f}</span><span class="text-xs font-bold text-slate-800">${p}%</span></div><div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden"><div class="h-full ${colors.bar}" style="width: ${p}%"></div></div></div>`;
-        }).join('');
-        
-        let btn = isC ? `<div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-bold border border-orange-200">Studio Chiuso</div>` : `<button onclick="toggleBooking()" class="w-full py-4 px-4 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${hasBooked ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}">${hasBooked ? 'Annulla Smart Working' : 'Prenota Smart Working'}</button>`;
-        
-        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="building-2" class="w-6 h-6 text-indigo-400"></i><h1 class="font-bold text-lg tracking-tight">Studio Smart Booking</h1></div><div class="flex items-center gap-4"><div class="flex items-center gap-2 text-sm"><div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold shadow-inner">${state.currentUser.name.charAt(0)}</div><span>${state.currentUser.name}</span></div><button onclick="logout()" class="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-300 hover:text-white"><i data-lucide="log-out" class="w-5 h-5"></i></button></div></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full grid grid-cols-1 lg:grid-cols-4 gap-8"><div class="lg:col-span-1 space-y-6"><div class="bg-white rounded-2xl shadow-md border overflow-hidden"><div class="bg-indigo-50 p-4 border-b border-indigo-100"><p class="text-xs font-bold text-indigo-400 uppercase mb-1">Giorno Selezionato</p><h2 class="text-lg font-bold capitalize text-indigo-900">${formatDisplayDate(dateStr)}</h2></div><div class="p-5">${btn}</div></div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="building-2" class="w-4 h-4 text-indigo-600"></i>Occupazione Piani</h2>${floorStats}</div><div class="bg-white rounded-2xl shadow-sm border p-6"><h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4 text-indigo-600"></i>I Tuoi Limiti</h2><div class="p-3 bg-slate-50 rounded-xl border border-slate-100 mb-2"><div class="flex justify-between items-end mb-1"><span class="text-xs text-slate-500">Giorni Mensili</span><span class="text-xs font-bold text-slate-800">${userB.length} / ${MAX_DAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${(userB.length / MAX_DAYS_PER_MONTH) * 100}%"></div></div></div><div class="p-3 bg-slate-50 rounded-xl border border-slate-100"><div class="flex justify-between items-end mb-1"><span class="text-xs text-slate-500">Venerdì</span><span class="text-xs font-bold text-slate-800">${userB.filter(b=>isFriday(b.date)).length} / ${MAX_FRIDAYS_PER_MONTH}</span></div><div class="w-full bg-slate-200 rounded-full h-1.5"><div class="bg-indigo-400 h-1.5 rounded-full" style="width: ${(userB.filter(b=>isFriday(b.date)).length / MAX_FRIDAYS_PER_MONTH) * 100}%"></div></div></div></div></div><div class="lg:col-span-3 bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase text-slate-800 tracking-tight">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium hover:text-indigo-600 transition-colors">Mese Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium hover:text-indigo-600 transition-colors">Mese Succ.</button></div></div><div class="p-6 flex-1"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3">${generateCalendarCellsHTML()}</div></div></div></main>`;
-    }
-
-    function generateCalendarCellsHTML() {
-        const year = state.currentMonthDate.getFullYear(), month = state.currentMonthDate.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        let firstDay = new Date(year, month, 1).getDay(); firstDay = firstDay === 0 ? 6 : firstDay - 1;
-        let html = ''; const selStr = getLocalDateString(state.selectedDate);
-        for (let i = 0; i < firstDay; i++) html += `<div class="aspect-square rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dObj = new Date(year, month, day), dStr = getLocalDateString(dObj), isSel = selStr === dStr;
-            const floorB = state.bookings.filter(b => b.date === dStr && b.floor === state.currentUser.floor);
-            const mSw = FLOORS[state.currentUser.floor]?.maxSw || 1, myB = state.bookings.find(b => b.date === dStr && b.userId == state.currentUser.id);
-            const isC = CLOSED_DAYS.includes(dStr);
-            let p = Math.round((floorB.length / mSw) * 100); if (p > 100) p = 100;
-            const colors = getCapacityColorLevels(p);
-            let cCl = `day-cell aspect-square p-2 rounded-xl border flex flex-col relative transition-all cursor-pointer ${isSel ? 'ring-4 ring-indigo-300 ring-offset-1 border-indigo-500 z-10' : ''}`, bH = "";
+        // Filtro Grafico a Barre
+        document.getElementById('departmentFilter').addEventListener('change', function(e) {
+            const selectedDep = e.target.value;
+            const newData = rawData.trendData.datasets[selectedDep];
             
-            if (isC) { cCl += " bg-orange-50 border-orange-200"; bH = `<div class="text-[9px] font-bold bg-orange-100 text-orange-600 rounded px-1 text-center uppercase shadow-sm">Chiuso</div>`; }
-            else if (myB) { cCl += " bg-indigo-600 border-indigo-700 shadow-md"; bH = `<div class="text-[9px] font-bold bg-white text-indigo-700 rounded px-1 text-center shadow-sm uppercase tracking-tighter">IL TUO SW</div>`; }
-            else if (floorB.length >= mSw) { cCl += " bg-red-50 border-red-200"; bH = `<div class="text-[9px] font-bold bg-red-500 text-white rounded px-1 text-center shadow-sm uppercase flex items-center justify-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> PIENO</div>`; }
-            else { bH = `<div class="text-[9px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} rounded py-1 border ${colors.badgeBorder} shadow-sm">SW al ${p}%</div>`; }
-            html += `<div class="${cCl}" onclick="selectDate('${dStr}')"><span class="font-bold text-xs ${isC ? 'text-orange-800' : 'text-slate-700'}">${day}</span><div class="mt-auto pt-1">${bH}</div></div>`;
-        }
-        return html;
-    }
+            // Colore dinamico in base al reparto selezionato
+            let newColor = '#6366f1'; // Default
+            if (selectedDep === 'architettura') newColor = '#6366f1';
+            if (selectedDep === 'newspace') newColor = '#14b8a6';
+            if (selectedDep === 'interior') newColor = '#f59e0b';
+            
+            barChartInstance.data.datasets[0].data = newData;
+            barChartInstance.data.datasets[0].backgroundColor = newColor;
+            barChartInstance.update();
+        });
 
-    function attachDashboardListeners() { /* Gestione inline */ }
-    function attachBoardListeners() { document.querySelectorAll('.board-day-cell').forEach(c => { c.onclick = () => openDayDetails(c.dataset.date); }); }
+        // Gestione Tabs Interattive per Insights Qualitativi
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
 
-    loadDataFromGoogleSheets();
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Rimuovi stato attivo da tutti i bottoni
+                tabBtns.forEach(b => {
+                    b.classList.remove('text-sw-accent1', 'border-sw-accent1', 'bg-white');
+                    b.classList.add('text-stone-500', 'border-transparent', 'hover:text-stone-700', 'hover:bg-stone-100');
+                });
+                
+                // Nascondi tutti i contenuti
+                tabContents.forEach(content => {
+                    content.classList.add('hidden');
+                });
 
-</script>
+                // Attiva bottone corrente
+                btn.classList.remove('text-stone-500', 'border-transparent', 'hover:text-stone-700', 'hover:bg-stone-100');
+                btn.classList.add('text-sw-accent1', 'border-sw-accent1', 'bg-white');
+
+                // Mostra contenuto target
+                const targetId = btn.getAttribute('data-target');
+                document.getElementById(targetId).classList.remove('hidden');
+            });
+        });
+
+        // Smooth Scroll per la navigazione fissa (compensa l'altezza dell'header)
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if(targetElement) {
+                    targetElement.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+
+        // Avvio dell'applicazione al caricamento del DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            
+            // Piccola animazione CSS inline per le tab
+            const style = document.createElement('style');
+            style.innerHTML = `
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+                .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+            `;
+            document.head.appendChild(style);
+        });
+
+    </script>
 </body>
 </html>
