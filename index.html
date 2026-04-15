@@ -424,43 +424,43 @@
             const globalPercentage = totalStudioCapacity > 0 ? Math.round((dayBookings.length / totalStudioCapacity) * 100) : 0;
             const colors = getCapacityColorLevels(globalPercentage);
 
-            let cellClass = `h-32 p-2 rounded-xl border flex flex-col relative transition-all `;
+            let cellClass = `h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm `;
             let contentClass = "";
             let innerHtml = "";
 
             if (isClosed) {
                 cellClass += " bg-orange-50 border-orange-200";
-                contentClass = "text-orange-800";
+                contentClass = "text-orange-800 font-bold";
                 innerHtml = `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded-md px-1 py-1 text-center uppercase shadow-sm">Studio Chiuso</div>`;
             } else if (isWeekend) {
                 cellClass += " bg-slate-50 border-slate-200 opacity-60";
                 contentClass = "text-slate-400";
             } else {
-                // APPLICAZIONE GRADIENTE ALLA CELLA GENERALE
+                // APPLICAZIONE GRADIENTE ALLA CELLA DEL CALENDARIO GENERALE
                 cellClass += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md`;
-                contentClass = colors.badgeText;
+                contentClass = `${colors.badgeText} font-bold`;
                 
                 if (dayBookings.length > 0) {
                     let namesHtml = dayBookings.map(b => {
                         const user = USERS.find(u => u.id === b.userId);
                         const name = user ? user.name : "Sconosciuto";
-                        return `<div class="text-[10px] font-medium bg-white/60 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate" title="${name} (${user.floor})">${name}</div>`;
+                        return `<div class="text-[10px] font-medium bg-white/80 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate shadow-sm mb-1" title="${name} (${user.floor})">${name}</div>`;
                     }).join('');
                     
                     innerHtml = `
                     <div class="mt-2 space-y-1 overflow-y-auto custom-scrollbar flex-1 pr-1">
                         ${namesHtml}
                     </div>
-                    <div class="text-[9px] ${colors.badgeText} text-right mt-1 font-bold">${globalPercentage}% Saturazione</div>`;
+                    <div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase tracking-tight">${globalPercentage}% Saturazione</div>`;
                 } else {
-                    innerHtml = `<div class="mt-auto text-[10px] font-medium text-slate-400 text-center">Nessuno in SW</div>`;
+                    innerHtml = `<div class="mt-auto text-[10px] font-medium text-slate-400 text-center italic">Nessun dipendente</div>`;
                 }
             }
 
             html += `
                 <div class="${cellClass}">
                     <div class="flex justify-between items-start">
-                        <span class="font-bold ${contentClass}">${day}</span>
+                        <span class="${contentClass}">${day}</span>
                     </div>
                     ${innerHtml}
                 </div>`;
