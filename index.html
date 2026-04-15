@@ -30,7 +30,8 @@
     // ==========================================
     // CONFIGURAZIONE DATABASE GOOGLE
     // ==========================================
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH1QybtRWXgU7jdb-TzBFum_igBQsHv1JhMeGza0cxc68Hqr1C0PkdHCBokbaWfslN/exec"; 
+    // Qui ho inserito il tuo NUOVO link generato da Apps Script
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_zKSGDnVNku17dc4mAdDOCPPZ7vaUU6bjDOJMiNV1btZaaLgQAiGcINGKBssDfsWT/exec"; 
 
     // --- VARIABILI GLOBALI ---
     let USERS = [];
@@ -144,7 +145,7 @@
         return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
     }
 
-    // SICUREZZA: Questa funzione gestisce sia il vecchio formato dati (Array) che il nuovo (Oggetto)
+    // Funzione sicura per i giorni chiusi
     function getChiusura(dateStr) {
         if (Array.isArray(CLOSED_DAYS)) {
             return CLOSED_DAYS.includes(dateStr) ? "Chiuso" : null;
@@ -254,7 +255,7 @@
             }).join('');
             modalHtml = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onclick="closeDayDetails()"><div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" onclick="event.stopPropagation()"><div class="bg-slate-900 p-6 text-white flex justify-between items-center"><div><p class="text-xs font-bold text-slate-400 uppercase">Recap Presenze SW</p><h3 class="text-lg font-bold capitalize">${formatDisplayDate(state.showDayDetails)}</h3></div><button onclick="closeDayDetails()" class="p-2 hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-6 h-6"></i></button></div><div class="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">${groups || '<p class="text-center py-8 text-slate-400">Nessuna prenotazione per questa data.</p>'}</div></div></div>`;
         }
-        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="calendar" class="w-6 h-6 text-emerald-400"></i><h1 class="font-bold text-lg text-white">Calendario SW Generale</h1></div><button onclick="exitBoardView()" class="bg-slate-800 hover:bg-slate-700 text-sm font-bold py-2 px-4 rounded-lg text-white">Esci</button></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full"><div class="bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm">Succ.</button></div></div><div class="p-6"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3" id="board-calendar-grid">${generateBoardCalendarCellsHTML()}</div></div></div></main>${modalHtml}`;
+        return `<header class="bg-slate-900 text-white shadow-md sticky top-0 z-40"><div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between"><div class="flex items-center gap-3"><i data-lucide="calendar" class="w-6 h-6 text-emerald-400"></i><h1 class="font-bold text-lg text-white">Calendario SW Generale</h1></div><button onclick="exitBoardView()" class="bg-slate-800 hover:bg-slate-700 text-sm font-bold py-2 px-4 rounded-lg text-white">Esci</button></div></header><main class="flex-1 max-w-7xl mx-auto px-4 py-8 w-full"><div class="bg-white rounded-2xl shadow-sm border flex flex-col overflow-hidden"><div class="p-6 border-b flex items-center justify-between bg-slate-50"><h2 class="text-xl font-bold uppercase">${state.currentMonthDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}</h2><div class="flex gap-2"><button onclick="changeMonth(-1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Prec.</button><button onclick="changeMonth(1)" class="px-4 py-2 bg-white border rounded-lg text-sm font-medium">Succ.</button></div></div><div class="p-6"><div class="grid grid-cols-7 gap-4 mb-4 text-center font-bold text-slate-400 text-xs uppercase tracking-widest">${['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(d=>`<div>${d}</div>`).join('')}</div><div class="grid grid-cols-7 gap-3" id="board-calendar-grid">${generateBoardCalendarCellsHTML()}</div></div></div></main>${modalHtml}`;
     }
 
     function generateBoardCalendarCellsHTML() {
