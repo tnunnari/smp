@@ -30,7 +30,6 @@
     // ==========================================
     // CONFIGURAZIONE DATABASE GOOGLE
     // ==========================================
-    // Qui ho inserito il tuo NUOVO link generato da Apps Script
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_zKSGDnVNku17dc4mAdDOCPPZ7vaUU6bjDOJMiNV1btZaaLgQAiGcINGKBssDfsWT/exec"; 
 
     // --- VARIABILI GLOBALI ---
@@ -54,6 +53,38 @@
         isLoading: true
     };
 
+    // --- FUNZIONI DI NORMALIZZAZIONE DATE (BLINDATURA) ---
+    // Questa funzione prende qualsiasi data arrivi da Google e la forza nel formato perfetto YYYY-MM-DD
+    function normalizeDateStr(dStr) {
+        if (!dStr) return null;
+        try {
+            // Se arriva come ISO con orario (es. 2026-04-10T22:00:00.000Z), taglia via l'orario
+            let justDate = String(dStr).split('T')[0];
+            let parts = justDate.split('-');
+            
+            // Se non ha i trattini, proviamo con gli slash
+            if (parts.length !== 3) parts = justDate.split('/');
+            
+            if (parts.length === 3) {
+                // Se la data è GG/MM/YYYY (formato europeo)
+                if (parts[0].length <= 2 && parts[2].length === 4) {
+                    const d = parts[0].padStart(2, '0');
+                    const m = parts[1].padStart(2, '0');
+                    const y = parts[2];
+                    return `${y}-${m}-${d}`;
+                }
+                // Se la data è YYYY-MM-DD
+                const y = parts[0];
+                const m = parts[1].padStart(2, '0');
+                const d = parts[2].padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return String(dStr).trim();
+        } catch (e) {
+            return String(dStr).trim();
+        }
+    }
+
     // --- CARICAMENTO DATI ---
     async function loadDataFromGoogleSheets() {
         try {
@@ -64,8 +95,26 @@
             const data = await response.json();
 
             USERS = data.users || [];
-            CLOSED_DAYS = data.closures || {}; 
-            state.bookings = data.bookings || [];
+            
+            // Normalizzazione forte delle prenotazioni
+            state.bookings = (data.bookings || []).map(b => ({
+                ...b,
+                date: normalizeDateStr(b.date)
+            })).filter(b => b.date !== null);
+
+            // Normalizzazione forte delle chiusure (gestisce sia array vecchi che oggetti nuovi)
+            CLOSED_DAYS = {};
+            if (Array.isArray(data.closures)) {
+                data.closures.forEach(d => {
+                    const normD = normalizeDateStr(d);
+                    if (normD) CLOSED_DAYS[normD] = "Chiuso";
+                });
+            } else if (data.closures && typeof data.closures === 'object') {
+                Object.keys(data.closures).forEach(k => {
+                    const normD = normalizeDateStr(k);
+                    if (normD) CLOSED_DAYS[normD] = data.closures[k];
+                });
+            }
 
             calculateDynamicFloors();
             state.isLoading = false;
@@ -145,16 +194,6 @@
         return { bar: 'bg-emerald-400', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-200' };
     }
 
-    // Funzione sicura per i giorni chiusi
-    function getChiusura(dateStr) {
-        if (Array.isArray(CLOSED_DAYS)) {
-            return CLOSED_DAYS.includes(dateStr) ? "Chiuso" : null;
-        } else if (typeof CLOSED_DAYS === 'object' && CLOSED_DAYS !== null) {
-            return CLOSED_DAYS[dateStr] || null;
-        }
-        return null;
-    }
-
     // --- AZIONI ---
     function selectLoginUser(userId) { state.loginUser = USERS.find(u => u.id == userId); state.loginStep = 2; render(); }
     function cancelLogin() { state.loginUser = null; state.loginStep = 1; render(); }
@@ -175,7 +214,7 @@
     async function toggleBooking() {
         const selectedDateStr = getLocalDateString(state.selectedDate);
         
-        const chiusuraMotivo = getChiusura(selectedDateStr);
+        const chiusuraMotivo = CLOSED_DAYS[selectedDateStr];
         if (chiusuraMotivo) { showNotification(`Studio chiuso: ${chiusuraMotivo}`, "error"); return; }
         
         const existingIndex = state.bookings.findIndex(b => b.userId == state.currentUser.id && b.date === selectedDateStr);
@@ -249,8 +288,8 @@
                 const p = dayB.filter(b => b.floor === f);
                 if (p.length === 0) return "";
                 return `<div class="mb-4"><h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b pb-1">${f}</h4><div class="space-y-1">${p.map(b => {
-                    const found = USERS.find(u => u.id == b.userId);
-                    return `<div class="flex items-center gap-2 text-sm font-semibold text-slate-700 p-2 bg-slate-50 rounded-lg"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>${found ? found.name : "Utente"}</div>`;
+                    // Utilizza b.name fornito direttamente dal backend per evitare problemi di ID
+                    return `<div class="flex items-center gap-2 text-sm font-semibold text-slate-700 p-2 bg-slate-50 rounded-lg"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>${b.name || "Utente"}</div>`;
                 }).join('')}</div></div>`;
             }).join('');
             modalHtml = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onclick="closeDayDetails()"><div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden" onclick="event.stopPropagation()"><div class="bg-slate-900 p-6 text-white flex justify-between items-center"><div><p class="text-xs font-bold text-slate-400 uppercase">Recap Presenze SW</p><h3 class="text-lg font-bold capitalize">${formatDisplayDate(state.showDayDetails)}</h3></div><button onclick="closeDayDetails()" class="p-2 hover:bg-slate-800 rounded-full"><i data-lucide="x" class="w-6 h-6"></i></button></div><div class="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">${groups || '<p class="text-center py-8 text-slate-400">Nessuna prenotazione per questa data.</p>'}</div></div></div>`;
@@ -266,12 +305,15 @@
         let totalCap = 0; Object.keys(FLOORS).forEach(f => totalCap += FLOORS[f].maxSw);
         for (let i = 0; i < firstDay; i++) html += `<div class="h-32 rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
         for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = getLocalDateString(new Date(year, month, day));
+            // Creazione data alle 12:00 per evitare cambi di giorno dovuti all'ora legale (DST)
+            const dObj = new Date(year, month, day, 12, 0, 0); 
+            const dateStr = getLocalDateString(dObj);
+            
             const dayB = state.bookings.filter(b => b.date === dateStr);
             const perc = totalCap > 0 ? Math.round((dayB.length / totalCap) * 100) : 0;
             const colors = getCapacityColorLevels(perc);
             
-            const chiusuraMotivo = getChiusura(dateStr);
+            const chiusuraMotivo = CLOSED_DAYS[dateStr];
             const isC = !!chiusuraMotivo;
 
             let cellCl = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
@@ -280,7 +322,8 @@
             
             let inner = isC 
                 ? `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded py-1 px-1 text-center uppercase truncate" title="${chiusuraMotivo}">${chiusuraMotivo}</div>` 
-                : `<div class="mt-1 space-y-0.5 overflow-hidden flex-1">${dayB.map(b => `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 rounded truncate shadow-sm mb-0.5">${USERS.find(u => u.id == b.userId)?.name || "..."}</div>`).join('')}</div><div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase">${perc}% SAT</div>`;
+                // Qui usiamo direttamente b.name invece di cercare l'ID
+                : `<div class="mt-1 space-y-0.5 overflow-hidden flex-1">${dayB.map(b => `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 rounded truncate shadow-sm mb-0.5">${b.name || "..."}</div>`).join('')}</div><div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase">${perc}% SAT</div>`;
             
             html += `<div class="${cellCl}" data-date="${dateStr}"><span class="font-bold text-xs ${isC ? 'text-orange-800' : colors.badgeText}">${day}</span>${inner}</div>`;
         }
@@ -292,7 +335,7 @@
         const userB = state.bookings.filter(b => b.userId == state.currentUser.id && b.date.startsWith(monStr));
         const hasBooked = state.bookings.some(b => b.userId == state.currentUser.id && b.date === dateStr);
         
-        const chiusuraMotivo = getChiusura(dateStr);
+        const chiusuraMotivo = CLOSED_DAYS[dateStr];
         const isC = !!chiusuraMotivo;
 
         let floorStats = Object.keys(FLOORS).map(f => {
@@ -312,14 +355,20 @@
         const year = state.currentMonthDate.getFullYear(), month = state.currentMonthDate.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         let firstDay = new Date(year, month, 1).getDay(); firstDay = firstDay === 0 ? 6 : firstDay - 1;
-        let html = ''; const selStr = getLocalDateString(state.selectedDate);
+        let html = ''; 
+        const selStr = getLocalDateString(state.selectedDate);
+        
         for (let i = 0; i < firstDay; i++) html += `<div class="aspect-square rounded-xl bg-slate-50 opacity-50 border border-transparent"></div>`;
         for (let day = 1; day <= daysInMonth; day++) {
-            const dObj = new Date(year, month, day), dStr = getLocalDateString(dObj), isSel = selStr === dStr;
-            const floorB = state.bookings.filter(b => b.date === dStr && b.floor === state.currentUser.floor);
-            const mSw = FLOORS[state.currentUser.floor]?.maxSw || 1, myB = state.bookings.find(b => b.date === dStr && b.userId == state.currentUser.id);
+            const dObj = new Date(year, month, day, 12, 0, 0); 
+            const dStr = getLocalDateString(dObj);
+            const isSel = selStr === dStr;
             
-            const chiusuraMotivo = getChiusura(dStr);
+            const floorB = state.bookings.filter(b => b.date === dStr && b.floor === state.currentUser.floor);
+            const mSw = FLOORS[state.currentUser.floor]?.maxSw || 1;
+            const myB = state.bookings.find(b => b.date === dStr && b.userId == state.currentUser.id);
+            
+            const chiusuraMotivo = CLOSED_DAYS[dStr];
             const isC = !!chiusuraMotivo;
 
             let p = Math.round((floorB.length / mSw) * 100); if (p > 100) p = 100;
