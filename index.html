@@ -17,6 +17,9 @@
             from { opacity: 0; transform: translate(-50%, -20px); }
             to { opacity: 1; transform: translate(-50%, 0); }
         }
+
+        /* Overlay per il dettaglio */
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
     </style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
@@ -40,6 +43,7 @@
         loginUser: null,
         currentUser: null,
         isBoardView: false, 
+        showDayDetails: null, // Memorizza la data del dettaglio da mostrare
         currentMonthDate: new Date(today.getFullYear(), today.getMonth(), 1),
         selectedDate: today,
         bookings: [
@@ -182,6 +186,7 @@
     function logout() {
         state.currentUser = null;
         state.isBoardView = false;
+        state.showDayDetails = null;
         render();
     }
 
@@ -192,6 +197,17 @@
 
     function exitBoardView() {
         state.isBoardView = false;
+        state.showDayDetails = null;
+        render();
+    }
+
+    function openDayDetails(dateStr) {
+        state.showDayDetails = dateStr;
+        render();
+    }
+
+    function closeDayDetails() {
+        state.showDayDetails = null;
         render();
     }
 
@@ -203,7 +219,6 @@
     }
 
     function selectDate(dateStr) {
-        if(state.isBoardView) return; 
         const parts = dateStr.split('-');
         state.selectedDate = new Date(parts[0], parseInt(parts[1], 10) - 1, parts[2]);
         render();
@@ -261,6 +276,7 @@
             app.innerHTML = renderLoadingScreen();
         } else if (state.isBoardView) {
             app.innerHTML = renderBoardScreen();
+            attachBoardListeners();
         } else if (!state.currentUser) {
             app.innerHTML = renderLoginScreen();
             if (state.loginStep === 2) document.getElementById('password-input').focus();
@@ -353,6 +369,54 @@
     }
 
     function renderBoardScreen() {
+        let modalHtml = "";
+        if (state.showDayDetails) {
+            const dayBookings = state.bookings.filter(b => b.date === state.showDayDetails);
+            
+            // Raggruppa per piano
+            let groupingHtml = Object.keys(FLOORS).map(floorName => {
+                const peopleInFloor = dayBookings.filter(b => b.floor === floorName);
+                if (peopleInFloor.length === 0) return "";
+
+                return `
+                <div class="mb-4">
+                    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-100 pb-1">${floorName}</h4>
+                    <div class="space-y-1">
+                        ${peopleInFloor.map(b => {
+                            const user = USERS.find(u => u.id === b.userId);
+                            return `<div class="flex items-center gap-2 text-sm font-semibold text-slate-700 p-2 bg-slate-50 rounded-lg">
+                                <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                ${user ? user.name : "Sconosciuto"}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }).join('');
+
+            if (dayBookings.length === 0) groupingHtml = `<div class="text-center py-8 text-slate-400 font-medium">Nessuna prenotazione per questo giorno.</div>`;
+
+            modalHtml = `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop" onclick="closeDayDetails()">
+                <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden transform transition-all" onclick="event.stopPropagation()">
+                    <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Recap Presenze SW</p>
+                            <h3 class="text-lg font-bold capitalize">${formatDisplayDate(state.showDayDetails)}</h3>
+                        </div>
+                        <button onclick="closeDayDetails()" class="p-2 hover:bg-slate-800 rounded-full transition-colors">
+                            <i data-lucide="x" class="w-6 h-6"></i>
+                        </button>
+                    </div>
+                    <div class="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                        ${groupingHtml}
+                    </div>
+                    <div class="p-4 bg-slate-50 text-center">
+                        <p class="text-xs text-slate-500 font-bold uppercase">Totale: ${dayBookings.length} persone in Smart Working</p>
+                    </div>
+                </div>
+            </div>`;
+        }
+
         return `
         <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
             <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -384,13 +448,14 @@
                     <div class="grid grid-cols-7 gap-4 mb-4">
                         ${['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(d => `<div class="text-center font-bold text-slate-400 text-sm uppercase tracking-wider">${d}</div>`).join('')}
                     </div>
-                    <div class="grid grid-cols-7 gap-3">
+                    <div class="grid grid-cols-7 gap-3" id="board-calendar-grid">
                         ${generateBoardCalendarCellsHTML()}
                     </div>
                 </div>
 
             </div>
-        </main>`;
+        </main>
+        ${modalHtml}`;
     }
 
     function generateBoardCalendarCellsHTML() {
@@ -403,7 +468,6 @@
         
         let html = '';
 
-        // Calcolo capacità totale dello studio (somma dei massimi per piano)
         let totalStudioCapacity = 0;
         Object.keys(FLOORS).forEach(f => totalStudioCapacity += FLOORS[f].maxSw);
 
@@ -419,12 +483,10 @@
             const isClosed = CLOSED_DAYS.includes(dateStr);
             
             const dayBookings = state.bookings.filter(b => b.date === dateStr);
-            
-            // Calcolo percentuale globale per questo giorno specifico
             const globalPercentage = totalStudioCapacity > 0 ? Math.round((dayBookings.length / totalStudioCapacity) * 100) : 0;
             const colors = getCapacityColorLevels(globalPercentage);
 
-            let cellClass = `h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm `;
+            let cellClass = `board-day-cell h-32 p-2 rounded-xl border flex flex-col relative transition-all shadow-sm cursor-pointer `;
             let contentClass = "";
             let innerHtml = "";
 
@@ -433,33 +495,32 @@
                 contentClass = "text-orange-800 font-bold";
                 innerHtml = `<div class="mt-auto text-[10px] font-bold bg-orange-100 text-orange-600 rounded-md px-1 py-1 text-center uppercase shadow-sm">Studio Chiuso</div>`;
             } else if (isWeekend) {
-                cellClass += " bg-slate-50 border-slate-200 opacity-60";
+                cellClass += " bg-slate-50 border-slate-200 opacity-60 pointer-events-none";
                 contentClass = "text-slate-400";
             } else {
-                // APPLICAZIONE GRADIENTE ALLA CELLA DEL CALENDARIO GENERALE
-                cellClass += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md`;
+                cellClass += ` ${colors.badgeBg} ${colors.badgeBorder} hover:shadow-md hover:-translate-y-1`;
                 contentClass = `${colors.badgeText} font-bold`;
                 
                 if (dayBookings.length > 0) {
                     let namesHtml = dayBookings.map(b => {
                         const user = USERS.find(u => u.id === b.userId);
                         const name = user ? user.name : "Sconosciuto";
-                        return `<div class="text-[10px] font-medium bg-white/80 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 truncate shadow-sm mb-1" title="${name} (${user.floor})">${name}</div>`;
+                        return `<div class="text-[9px] font-medium bg-white/80 text-slate-700 px-1 py-0.5 rounded border border-slate-200 truncate shadow-sm mb-0.5">${name}</div>`;
                     }).join('');
                     
                     innerHtml = `
-                    <div class="mt-2 space-y-1 overflow-y-auto custom-scrollbar flex-1 pr-1">
+                    <div class="mt-1 space-y-0.5 overflow-hidden flex-1 pointer-events-none">
                         ${namesHtml}
                     </div>
-                    <div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase tracking-tight">${globalPercentage}% Saturazione</div>`;
+                    <div class="text-[9px] ${colors.badgeText} text-right mt-1 font-extrabold uppercase tracking-tight pointer-events-none">${globalPercentage}% Saturazione</div>`;
                 } else {
-                    innerHtml = `<div class="mt-auto text-[10px] font-medium text-slate-400 text-center italic">Nessun dipendente</div>`;
+                    innerHtml = `<div class="mt-auto text-[9px] font-medium text-slate-400 text-center italic pointer-events-none">Nessun dipendente</div>`;
                 }
             }
 
             html += `
-                <div class="${cellClass}">
-                    <div class="flex justify-between items-start">
+                <div class="${cellClass}" data-date="${dateStr}">
+                    <div class="flex justify-between items-start pointer-events-none">
                         <span class="${contentClass}">${day}</span>
                     </div>
                     ${innerHtml}
@@ -486,7 +547,6 @@
             const max = config.maxSw;
             const percentage = Math.round((booked / max) * 100);
             const displayPercentage = percentage > 100 ? 100 : percentage;
-            
             const colors = getCapacityColorLevels(displayPercentage);
 
             return `
@@ -502,7 +562,6 @@
         }).join('');
 
         let bookingActionHtml = "";
-        
         if (isSelectedClosed) {
             bookingActionHtml = `<div class="text-center p-4 bg-orange-50 rounded-xl text-orange-600 font-medium border border-orange-100 flex flex-col items-center gap-2"><i data-lucide="store" class="w-6 h-6"></i> Studio Chiuso</div>`;
         } else if (isSelectedWeekend) {
@@ -607,39 +666,30 @@
         const year = state.currentMonthDate.getFullYear();
         const month = state.currentMonthDate.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
         let firstDay = new Date(year, month, 1).getDay();
         firstDay = firstDay === 0 ? 6 : firstDay - 1; 
-        
         let html = '';
         const selectedDateStr = getLocalDateString(state.selectedDate);
-
         for (let i = 0; i < firstDay; i++) {
             html += `<div class="aspect-square rounded-xl bg-slate-50/50 border border-slate-100 opacity-50"></div>`;
         }
-
         for (let day = 1; day <= daysInMonth; day++) {
             const dateObj = new Date(year, month, day);
             const dateStr = getLocalDateString(dateObj);
             const dayOfWeek = dateObj.getDay();
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isClosed = CLOSED_DAYS.includes(dateStr);
-            
             const isSelected = selectedDateStr === dateStr;
             const floorBookingsToday = state.bookings.filter(b => b.date === dateStr && b.floor === state.currentUser.floor);
             const maxSw = FLOORS[state.currentUser.floor].maxSw;
             const isFloorFull = floorBookingsToday.length >= maxSw;
             const myBooking = state.bookings.find(b => b.date === dateStr && b.userId === state.currentUser.id);
-
             let percentage = Math.round((floorBookingsToday.length / maxSw) * 100);
             if (percentage > 100) percentage = 100;
-            
             const colors = getCapacityColorLevels(percentage);
-
             let cellClass = `day-cell aspect-square p-2 rounded-xl border flex flex-col relative transition-all cursor-pointer ${isSelected ? 'ring-4 ring-indigo-300 ring-offset-1 border-indigo-500 z-10' : ''}`;
             let contentClass = "";
             let badgeHtml = "";
-
             if (isClosed) {
                 cellClass += " bg-orange-50 border-orange-200";
                 contentClass = "text-orange-800";
@@ -660,11 +710,8 @@
                 contentClass = "text-slate-700";
                 badgeHtml = `<div class="text-[10px] font-semibold text-center ${colors.badgeText} ${colors.badgeBg} ${colors.badgeBorder} rounded-md py-1 border shadow-sm transition-colors">SW al ${percentage}%</div>`;
             }
-
             const pointerIcon = (isSelected && !isWeekend && !isClosed) ? `<i data-lucide="mouse-pointer-click" class="w-4 h-4 ${myBooking ? 'text-white' : 'text-indigo-400'} animate-bounce"></i>` : '';
-
-            html += `
-                <div class="${cellClass}" data-date="${dateStr}">
+            html += `<div class="${cellClass}" data-date="${dateStr}">
                     <div class="flex justify-between items-start">
                         <span class="font-bold ${contentClass}">${day}</span>
                         ${pointerIcon}
@@ -679,6 +726,14 @@
         document.querySelectorAll('.day-cell').forEach(cell => {
             cell.addEventListener('click', function() {
                 selectDate(this.getAttribute('data-date'));
+            });
+        });
+    }
+
+    function attachBoardListeners() {
+        document.querySelectorAll('.board-day-cell').forEach(cell => {
+            cell.addEventListener('click', function() {
+                openDayDetails(this.getAttribute('data-date'));
             });
         });
     }
